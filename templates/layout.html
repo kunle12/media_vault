@@ -1,0 +1,88 @@
+<!-- templates/layout.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Upload Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .flash-message {
+            animation: fadeOut 5s forwards;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; display: none; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="flex flex-col min-h-screen">
+        <nav class="bg-white border-b border-gray-200">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <div class="flex-shrink-0 flex items-center">
+                            <a href="{{ url_for('index') }}" class="text-xl font-bold text-gray-800">VideoVault</a>
+                        </div>
+                        <div class="hidden sm:ml-6 sm:flex sm:items-center">
+                            <div class="space-x-4">
+                                <a href="{{ url_for('index') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Home</a>
+                                {% if 'user_id' in session %}
+                                <a href="{{ url_for('dashboard') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Dashboard</a>
+                                <a href="{{ url_for('upload') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Upload</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:items-center">
+                        {% if 'user_id' in session %}
+                        <span class="text-sm text-gray-700 mr-4">{{ session.username }}</span>
+                        <a href="{{ url_for('logout') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Logout</a>
+                        {% else %}
+                        <a href="{{ url_for('login') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Login</a>
+                        <a href="{{ url_for('register') }}" class="ml-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700">Register</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                    {% for category, message in messages %}
+                        {% if category == 'error' %}
+                            <div class="flash-message bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded">
+                                <p>{{ message }}</p>
+                            </div>
+                        {% elif category == 'success' %}
+                            <div class="flash-message bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded">
+                                <p>{{ message }}</p>
+                            </div>
+                        {% else %}
+                            <div class="flash-message bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded">
+                                <p>{{ message }}</p>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <main class="flex-grow">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+        
+        <footer class="bg-white border-t border-gray-200">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <p class="text-center text-gray-500 text-sm">© 2025 Galaxy Network. All rights reserved.</p>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

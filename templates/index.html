@@ -1,0 +1,41 @@
+<!-- templates/index.html -->
+{% extends "layout.html" %}
+{% block content %}
+<div class="text-center max-w-3xl mx-auto">
+    <h1 class="text-4xl font-bold text-gray-900 mb-4">Secure Video Storage</h1>
+    <p class="text-xl text-gray-600 mb-8">Upload, store, and manage your videos with ease and security.</p>
+    
+    <div class="flex justify-center space-x-4">
+        {% if 'user_id' in session %}
+        <a href="{{ url_for('dashboard') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+            Go to Dashboard
+        </a>
+        <a href="{{ url_for('upload') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200">
+            Upload a Video
+        </a>
+        {% else %}
+        <a href="{{ url_for('login') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+            Sign In
+        </a>
+        <a href="{{ url_for('register') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200">
+            Register
+        </a>
+        {% endif %}
+    </div>
+    
+    <div class="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Secure Storage</h2>
+            <p class="text-gray-600">Your videos are securely stored and only accessible to you.</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Easy Uploads</h2>
+            <p class="text-gray-600">Simple interface for uploading and managing your video files.</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Multiple Sign-In Options</h2>
+            <p class="text-gray-600">Sign in with password or Google authentication.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
