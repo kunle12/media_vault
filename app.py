@@ -7,18 +7,15 @@ from functools import wraps
 from authlib.integrations.flask_client import OAuth
 from flask import (
     Flask,
+    flash,
+    redirect,
     render_template,
     request,
-    redirect,
-    url_for,
-    flash,
-    session,
     send_from_directory,
+    session,
+    url_for,
 )
 from flask_bcrypt import Bcrypt
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, FileField
-from wtforms.validators import DataRequired, Email, Length, EqualTo
 from werkzeug.utils import secure_filename
 
 # App configuration
@@ -28,7 +25,18 @@ app.config["WTF_CSRF_ENABLED"] = True
 app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["UPLOAD_FOLDER"] = os.environ.get("UPLOAD_FOLDER", "uploads")
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500 MB max upload
-app.config["ALLOWED_EXTENSIONS"] = {"mp4", "avi", "mov", "mkv", "wmv", "flv", "webm"}
+app.config["ALLOWED_EXTENSIONS"] = {
+    "mp4",
+    "avi",
+    "mov",
+    "mkv",
+    "wmv",
+    "flv",
+    "webm",
+    "mp3",
+    "wav",
+    "ogg",
+}
 app.config["DATABASE"] = os.environ.get("DATABASE", "videodb.sqlite")
 
 # Google OAuth config
@@ -227,7 +235,7 @@ def google_login():
 
 @app.route("/login/google/callback")
 def google_auth():
-    token = google.authorize_access_token()
+    google.authorize_access_token()
     resp = google.get("userinfo")
     user_info = resp.json()
 

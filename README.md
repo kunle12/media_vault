@@ -6,6 +6,7 @@ A Flask-based personal video management application that allows users to upload,
 
 - **User Authentication**: Register and login with email/password or Google OAuth
 - **Video Upload**: Upload video files (mp4, avi, mov, mkv, wmv, flv, webm) up to 500MB
+- **Audio Upload**: Upload audio files (mp3, wav, ogg) up to 500MB
 - **Video Management**: View, download, and delete your uploaded videos
 - **Dashboard**: Personal dashboard showing all your uploaded videos
 - **Security**: Password hashing with bcrypt, session-based authentication, CSRF protection
@@ -132,8 +133,9 @@ The following configuration options can be set via environment variables or in a
 | GOOGLE_CLIENT_ID | - | Google OAuth client ID |
 | GOOGLE_CLIENT_SECRET | - | Google OAuth client secret |
 
-## Allowed Video Formats
+## Allowed File Formats
 
+### Video
 - mp4
 - avi
 - mov
@@ -141,6 +143,11 @@ The following configuration options can be set via environment variables or in a
 - wmv
 - flv
 - webm
+
+### Audio
+- mp3
+- wav
+- ogg
 
 ## License
 
