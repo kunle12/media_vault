@@ -1,8 +1,8 @@
-# VideoVault - Claude Code Instructions
+# MediaVault - Claude Code Instructions
 
 ## Project Overview
 
-VideoVault is a Flask-based personal video management application with passwordless email authentication. Users can upload, view, and manage their video/audio collection.
+MediaVault is a Flask-based personal multimedia management application with passwordless email authentication. Users can upload, view, and manage their video and audio collection.
 
 ## Tech Stack
 
@@ -59,7 +59,7 @@ The app runs on `http://localhost:5050`
 | Variable | Default | Description |
 |----------|---------|-------------|
 | SECRET_KEY | auto-generated | Flask secret key |
-| UPLOAD_FOLDER | uploads | Video storage directory |
+| UPLOAD_FOLDER | uploads | Media storage directory |
 | DATABASE | videodb.sqlite | SQLite database |
 | MAX_CONTENT_LENGTH | 524288000 | 500MB max upload |
 | CACHE_TYPE | simple | simple or redis |

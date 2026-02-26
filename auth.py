@@ -100,7 +100,7 @@ def send_email(to_email, code):
 
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Your VideoVault Verification Code"
+        msg["Subject"] = "Your MediaVault Verification Code"
         msg["From"] = from_email
         msg["To"] = to_email
 
@@ -109,7 +109,7 @@ def send_email(to_email, code):
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
             <div style="max-width: 400px; margin: 0 auto; background: #f8f9fa; border-radius: 12px; padding: 30px;">
                 <h2 style="margin: 0 0 20px; color: #333;">Your Verification Code</h2>
-                <p style="color: #666; margin-bottom: 20px;">Enter this code to access VideoVault:</p>
+                <p style="color: #666; margin-bottom: 20px;">Enter this code to access MediaVault:</p>
                 <div style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #2563eb; text-align: center; padding: 15px; background: white; border-radius: 8px;">
                     {code}
                 </div>

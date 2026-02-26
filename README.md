@@ -1,14 +1,13 @@
-# VideoVault
+# MediaVault
 
-A Flask-based personal video management application that allows users to upload, view, and manage their video collection.
+A Flask-based personal multimedia management application that allows users to upload, view, and manage their video and audio collection.
 
 ## Features
 
 - **Passwordless Authentication**: Email-based verification code login
-- **Video Upload**: Upload video files (mp4, avi, mov, mkv, wmv, flv, webm) up to 500MB
-- **Audio Upload**: Upload audio files (mp3, wav, ogg) up to 500MB
-- **Video Management**: View, download, and delete your uploaded videos
-- **Dashboard**: Personal dashboard showing all your uploaded videos
+- **Media Upload**: Upload video files (mp4, avi, mov, mkv, wmv, flv, webm) and audio files (mp3, wav, ogg) up to 500MB
+- **Media Management**: View, download, and delete your uploaded files
+- **Dashboard**: Personal dashboard showing all your uploaded media
 - **Security**: Time-sensitive verification codes (5 min), rate limiting, session-based auth
 
 ## Requirements
@@ -20,7 +19,7 @@ A Flask-based personal video management application that allows users to upload,
 
 1. Clone the repository and navigate to the project directory:
    ```bash
-   cd VideoVault
+   cd MediaVault
    ```
 
 2. Create a virtual environment (optional but recommended):
@@ -81,7 +80,7 @@ The application will start on `http://localhost:5050`. The database and uploads 
 
 ## Authentication
 
-VideoVault uses **passwordless email authentication**:
+MediaVault uses **passwordless email authentication**:
 
 1. Enter your email on the sign-in modal
 2. If your email is in the allowed list, a 6-character verification code is sent
@@ -106,22 +105,24 @@ The app supports multiple email providers:
 ## Project Structure
 
 ```
-VideoVault/
+MediaVault/
 ├── app.py                   # Main application file
 ├── auth.py                  # Authentication blueprint
 ├── allowed_emails.txt       # List of allowed email addresses
 ├── requirements.txt         # Python dependencies
 ├── README.md                # Documentation
+├── Dockerfile               # Docker configuration
+├── docker-compose.yml       # Docker Compose configuration
 ├── videodb.sqlite          # SQLite database (auto-created)
 ├── templates/              # HTML templates
 │   ├── layout.html         # Base template
 │   ├── index.html          # Home page
 │   ├── dashboard.html      # User dashboard
-│   ├── upload.html         # Video upload page
-│   ├── video.html          # Video view page
+│   ├── upload.html         # Media upload page
+│   ├── video.html          # Media view page
 │   ├── auth_modals.html    # Authentication modals
 │   └── auth_trigger.html   # Auth trigger page
-└── uploads/                # Video storage directory (auto-created)
+└── uploads/                # Media storage directory (auto-created)
 ```
 
 ## Routes
@@ -171,7 +172,7 @@ The following configuration options can be set via environment variables:
 |----------|---------|-------------|
 | SECRET_KEY | random 32-byte hex | Flask secret key (auto-generated) |
 | WTF_CSRF_ENABLED | True | Enable CSRF protection |
-| UPLOAD_FOLDER | uploads | Directory for storing videos |
+| UPLOAD_FOLDER | uploads | Directory for storing media |
 | MAX_CONTENT_LENGTH | 524288000 (500MB) | Maximum upload size |
 | DATABASE | videodb.sqlite | SQLite database file |
 | CACHE_TYPE | simple | Cache type (simple, redis) |
