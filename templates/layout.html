@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Upload Service</title>
+    <title>VideoVault</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .flash-message {
@@ -18,6 +18,7 @@
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+    {% include 'auth_modals.html' %}
     <div class="flex flex-col min-h-screen">
         <nav class="bg-white border-b border-gray-200">
             <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -38,11 +39,10 @@
                     </div>
                     <div class="hidden sm:ml-6 sm:flex sm:items-center">
                         {% if 'user_id' in session %}
-                        <span class="text-sm text-gray-700 mr-4">{{ session.username }}</span>
-                        <a href="{{ url_for('logout') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Logout</a>
+                        <span class="text-sm text-gray-700 mr-4">{{ session.email }}</span>
+                        <button onclick="logout()" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Logout</button>
                         {% else %}
-                        <a href="{{ url_for('login') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Login</a>
-                        <a href="{{ url_for('register') }}" class="ml-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700">Register</a>
+                        <button onclick="showEmailModal()" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100">Sign In</button>
                         {% endif %}
                     </div>
                 </div>
@@ -84,5 +84,16 @@
             </div>
         </footer>
     </div>
+
+    <script>
+        async function logout() {
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+                window.location.href = '/';
+            } catch (err) {
+                console.error('Logout failed:', err);
+            }
+        }
+    </script>
 </body>
 </html>
