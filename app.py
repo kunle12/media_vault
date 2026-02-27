@@ -1,4 +1,5 @@
-# app.py
+"""MediaVault - Flask application for managing video and audio files."""
+
 import os
 import sqlite3
 import uuid
@@ -55,12 +56,14 @@ app.register_blueprint(auth_bp)
 
 # Database setup
 def get_db_connection():
+    """Get SQLite database connection."""
     conn = sqlite3.connect(app.config["DATABASE"])
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
+    """Initialize database tables and indexes."""
     with app.app_context():
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -96,6 +99,7 @@ def init_db():
 
 
 def ensure_upload_folder():
+    """Create upload folder if it doesn't exist."""
     upload_folder = app.config["UPLOAD_FOLDER"]
     if not os.path.exists(upload_folder):
         os.makedirs(upload_folder)
@@ -103,6 +107,7 @@ def ensure_upload_folder():
 
 # Helper functions
 def allowed_file(filename):
+    """Check if filename has an allowed extension."""
     return (
         "." in filename
         and filename.rsplit(".", 1)[1].lower() in app.config["ALLOWED_EXTENSIONS"]
@@ -110,6 +115,8 @@ def allowed_file(filename):
 
 
 def login_required(f):
+    """Decorator to require authentication for routes."""
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if "user_id" not in session:
@@ -122,6 +129,7 @@ def login_required(f):
 # Routes
 @app.route("/")
 def index():
+    """Home page - redirect to dashboard if authenticated."""
     if "user_id" in session:
         return redirect(url_for("dashboard"))
     return render_template("index.html")
@@ -129,12 +137,14 @@ def index():
 
 @app.route("/trigger-auth")
 def trigger_auth():
+    """Render the auth trigger page."""
     return render_template("auth_trigger.html")
 
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
+    """User dashboard showing their uploaded videos."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -149,6 +159,7 @@ def dashboard():
 @app.route("/upload", methods=["GET", "POST"])
 @login_required
 def upload():
+    """Handle file upload - GET shows form, POST processes upload."""
     if request.method == "POST":
         if "video" not in request.files:
             flash("No file part", "error")
@@ -196,6 +207,7 @@ def upload():
 @app.route("/video/<int:video_id>")
 @login_required
 def view_video(video_id):
+    """Display a single video by ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -215,6 +227,7 @@ def view_video(video_id):
 @app.route("/video/<int:video_id>/download")
 @login_required
 def download_video(video_id):
+    """Download a video file by ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -239,6 +252,7 @@ def download_video(video_id):
 @app.route("/video/<int:video_id>/delete", methods=["POST"])
 @login_required
 def delete_video(video_id):
+    """Delete a video by ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(

@@ -1,3 +1,5 @@
+"""Authentication blueprint for email-based passwordless login."""
+
 import os
 import random
 import smtplib
@@ -25,6 +27,7 @@ RATE_LIMIT_SECONDS = 60  # Prevent spam
 
 
 def load_allowed_emails():
+    """Load allowed emails from ALLOWED_EMAILS environment variable."""
     emails_env = os.environ.get("ALLOWED_EMAILS", "")
     if emails_env:
         return {email.strip().lower() for email in emails_env.split() if email.strip()}
@@ -32,18 +35,21 @@ def load_allowed_emails():
 
 
 def generate_code():
+    """Generate a random verification code."""
     return "".join(
         random.choices(string.ascii_uppercase + string.digits, k=CODE_LENGTH)
     )
 
 
 def get_cache():
+    """Get the Flask cache instance."""
     return current_app.extensions["cache"][
         list(current_app.extensions["cache"].keys())[0]
     ]
 
 
 def store_code(email, code):
+    """Store authentication code in cache with expiry."""
     cache = get_cache()
     key = f"auth_code:{email}"
     cache.set(
@@ -59,18 +65,21 @@ def store_code(email, code):
 
 
 def get_code_data(email):
+    """Retrieve stored code data from cache."""
     cache = get_cache()
     key = f"auth_code:{email}"
     return cache.get(key)
 
 
 def delete_code(email):
+    """Remove code from cache."""
     cache = get_cache()
     key = f"auth_code:{email}"
     cache.delete(key)
 
 
 def is_code_expired(code_data):
+    """Check if the code has expired."""
     if not code_data:
         return True
     elapsed = time.time() - code_data.get("created_at", 0)
@@ -78,6 +87,7 @@ def is_code_expired(code_data):
 
 
 def send_email(to_email, code):
+    """Send verification email with the code."""
     email_provider = os.environ.get("EMAIL_PROVIDER", "generic").lower()
 
     smtp_host = os.environ.get("SMTP_HOST", "")
@@ -135,12 +145,14 @@ def send_email(to_email, code):
 
 
 def get_db_connection():
+    """Get SQLite database connection."""
     conn = sqlite3.connect(current_app.config["DATABASE"])
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def ensure_user_exists(email):
+    """Create user if not exists, return user ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
@@ -160,6 +172,7 @@ def ensure_user_exists(email):
 
 
 def check_rate_limit(email):
+    """Check if email has exceeded rate limit for code requests."""
     cache = get_cache()
     key = f"rate_limit:{email}"
     last_request = cache.get(key)
@@ -171,6 +184,7 @@ def check_rate_limit(email):
 
 @auth_bp.route("/auth/request-code", methods=["POST"])
 def request_code():
+    """Request a verification code to be sent to the user's email."""
     data = request.get_json()
     email = data.get("email", "").strip().lower()
 
@@ -207,6 +221,7 @@ def request_code():
 
 @auth_bp.route("/auth/verify-code", methods=["POST"])
 def verify_code():
+    """Verify the code and create a session if valid."""
     data = request.get_json()
     email = data.get("email", "").strip().lower()
     code = data.get("code", "").strip().upper()
@@ -264,12 +279,14 @@ def verify_code():
 
 @auth_bp.route("/auth/logout", methods=["POST"])
 def logout():
+    """Clear the user session."""
     session.clear()
     return jsonify({"success": True})
 
 
 @auth_bp.route("/auth/status", methods=["GET"])
 def status():
+    """Check if user is authenticated."""
     if "user_id" in session:
         return jsonify({"authenticated": True, "email": session.get("email", "")})
     return jsonify({"authenticated": False})
