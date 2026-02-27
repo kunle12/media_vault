@@ -93,9 +93,7 @@ def init_db():
         )
         """)
 
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_media_user_id ON media(user_id)"
-        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_user_id ON media(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
 
         conn.commit()
@@ -177,17 +175,15 @@ def upload():
             return redirect(request.url)
 
         if file and allowed_file(file.filename):
-            original_filename = file.filename
-            if not original_filename:
-                flash("Invalid filename", "error")
-                return redirect(request.url)
+            original_filename = os.path.basename(file.filename or "")
             unique_filename = f"{uuid.uuid4()}_{original_filename}"
 
             file_size = 0
             if is_s3_enabled():
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)
                 storage_key = storage.save(file, unique_filename)
-                file_obj = storage.get_file(storage_key)
-                file_size = len(file_obj)
             else:
                 storage_key = storage.save(file, unique_filename)
                 file_size = os.path.getsize(storage_key)
@@ -216,85 +212,87 @@ def upload():
     return render_template("upload.html")
 
 
-@app.route("/video/<int:video_id>")
+@app.route("/media/<int:media_id>")
 @login_required
-def view_video(video_id):
-    """Display a single video by ID."""
+def view_media(media_id):
+    """Display a single media file by ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM media WHERE id = ? AND user_id = ?",
-        (video_id, session["user_id"]),
+        (media_id, session["user_id"]),
     )
-    video = cursor.fetchone()
+    media = cursor.fetchone()
     conn.close()
 
-    if not video:
-        flash("Video not found or you do not have permission to view it", "error")
+    if not media:
+        flash("Media not found or you do not have permission to view it", "error")
         return redirect(url_for("dashboard"))
 
-    return render_template("video.html", video=video)
+    return render_template("video.html", video=media)
 
 
-@app.route("/video/<int:video_id>/download")
+@app.route("/media/<int:media_id>/download")
 @login_required
-def download_video(video_id):
-    """Download a video file by ID."""
+def download_media(media_id):
+    """Download a media file by ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM media WHERE id = ? AND user_id = ?",
-        (video_id, session["user_id"]),
+        (media_id, session["user_id"]),
     )
-    video = cursor.fetchone()
+    media = cursor.fetchone()
     conn.close()
 
-    if not video:
-        flash("Video not found or you do not have permission to download it", "error")
+    if not media:
+        flash("Media not found or you do not have permission to download it", "error")
         return redirect(url_for("dashboard"))
 
     if is_s3_enabled():
         presigned_url = storage.get_url(
-            video["storage_key"], video["original_filename"]
+            media["storage_key"], media["original_filename"]
         )
         if presigned_url:
             return redirect(presigned_url)
         flash("Failed to generate download URL", "error")
         return redirect(url_for("dashboard"))
     else:
+        file_content = storage.get_file(media["storage_key"])
         return Response(
-            storage.get_file(video["storage_key"]),
+            file_content,
             mimetype="application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{video["original_filename"]}"'
+                "Content-Disposition": f'attachment; filename="{media["original_filename"]}"',
+                "Content-Length": media["file_size"],
             },
         )
 
 
-@app.route("/video/<int:video_id>/delete", methods=["POST"])
+@app.route("/media/<int:media_id>/delete", methods=["POST"])
 @login_required
-def delete_video(video_id):
-    """Delete a video by ID."""
+def delete_media(media_id):
+    """Delete a media file by ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM media WHERE id = ? AND user_id = ?",
-        (video_id, session["user_id"]),
+        (media_id, session["user_id"]),
     )
-    video = cursor.fetchone()
+    media = cursor.fetchone()
 
-    if not video:
+    if not media:
         conn.close()
-        flash("Video not found or you do not have permission to delete it", "error")
+        flash("Media not found or you do not have permission to delete it", "error")
         return redirect(url_for("dashboard"))
 
-    storage.delete(video["storage_key"])
+    storage.delete(media["storage_key"])
 
-    cursor.execute("DELETE FROM media WHERE id = ?", (video_id,))
+    cursor.execute("DELETE FROM media WHERE id = ?", (media_id,))
     conn.commit()
     conn.close()
 
-    flash("Video successfully deleted", "success")
+    flash("Media successfully deleted", "success")
     return redirect(url_for("dashboard"))
 
 

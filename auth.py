@@ -43,9 +43,14 @@ def generate_code():
 
 def get_cache():
     """Get the Flask cache instance."""
-    return current_app.extensions["cache"][
-        list(current_app.extensions["cache"].keys())[0]
-    ]
+    cache_ext = current_app.extensions.get("cache")
+    if cache_ext is None:
+        raise RuntimeError("Cache not initialized")
+    if isinstance(cache_ext, dict):
+        if not cache_ext:
+            raise RuntimeError("Cache not initialized")
+        return cache_ext.get(list(cache_ext.keys())[0])
+    return cache_ext
 
 
 def store_code(email, code):

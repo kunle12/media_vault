@@ -133,9 +133,9 @@ MediaVault/
 | `/auth/status` | GET | Check auth status |
 | `/dashboard` | GET | User dashboard (protected) |
 | `/upload` | GET, POST | Media upload (protected) |
-| `/video/<id>` | GET | View media (protected) |
-| `/video/<id>/download` | GET | Download media (protected) |
-| `/video/<id>/delete` | POST | Delete media (protected) |
+| `/media/<id>` | GET | View media (protected) |
+| `/media/<id>/download` | GET | Download media (protected) |
+| `/media/<id>/delete` | POST | Delete media (protected) |
 
 ## Database Schema
 
