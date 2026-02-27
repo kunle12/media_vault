@@ -7,17 +7,18 @@ from functools import wraps
 
 from flask import (
     Flask,
+    Response,
     flash,
     redirect,
     render_template,
     request,
-    send_from_directory,
     session,
     url_for,
 )
 from flask_caching import Cache
 
 from auth import auth_bp
+from storage import get_storage_backend, is_s3_enabled
 
 # App configuration
 app = Flask(__name__)
@@ -53,6 +54,9 @@ cache = Cache(app)
 
 app.register_blueprint(auth_bp)
 
+# Initialize storage backend
+storage = get_storage_backend()
+
 
 # Database setup
 def get_db_connection():
@@ -81,7 +85,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
             original_filename TEXT NOT NULL,
-            file_path TEXT NOT NULL,
+            storage_key TEXT NOT NULL,
             file_size INTEGER NOT NULL,
             uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             user_id INTEGER NOT NULL,
@@ -100,9 +104,10 @@ def init_db():
 
 def ensure_upload_folder():
     """Create upload folder if it doesn't exist."""
-    upload_folder = app.config["UPLOAD_FOLDER"]
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
+    if not is_s3_enabled():
+        upload_folder = app.config["UPLOAD_FOLDER"]
+        if not os.path.exists(upload_folder):
+            os.makedirs(upload_folder)
 
 
 # Helper functions
@@ -177,18 +182,25 @@ def upload():
                 flash("Invalid filename", "error")
                 return redirect(request.url)
             unique_filename = f"{uuid.uuid4()}_{original_filename}"
-            file_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
-            file.save(file_path)
+
+            file_size = 0
+            if is_s3_enabled():
+                storage_key = storage.save(file, unique_filename)
+                file_obj = storage.get_file(storage_key)
+                file_size = len(file_obj)
+            else:
+                storage_key = storage.save(file, unique_filename)
+                file_size = os.path.getsize(storage_key)
 
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO videos (filename, original_filename, file_path, file_size, user_id) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO videos (filename, original_filename, storage_key, file_size, user_id) VALUES (?, ?, ?, ?, ?)",
                 (
                     unique_filename,
                     original_filename,
-                    file_path,
-                    os.path.getsize(file_path),
+                    storage_key,
+                    file_size,
                     session["user_id"],
                 ),
             )
@@ -241,12 +253,22 @@ def download_video(video_id):
         flash("Video not found or you do not have permission to download it", "error")
         return redirect(url_for("dashboard"))
 
-    return send_from_directory(
-        os.path.dirname(video["file_path"]),
-        os.path.basename(video["file_path"]),
-        as_attachment=True,
-        download_name=video["original_filename"],
-    )
+    if is_s3_enabled():
+        presigned_url = storage.get_url(
+            video["storage_key"], video["original_filename"]
+        )
+        if presigned_url:
+            return redirect(presigned_url)
+        flash("Failed to generate download URL", "error")
+        return redirect(url_for("dashboard"))
+    else:
+        return Response(
+            storage.get_file(video["storage_key"]),
+            mimetype="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{video["original_filename"]}"'
+            },
+        )
 
 
 @app.route("/video/<int:video_id>/delete", methods=["POST"])
@@ -266,10 +288,7 @@ def delete_video(video_id):
         flash("Video not found or you do not have permission to delete it", "error")
         return redirect(url_for("dashboard"))
 
-    try:
-        os.remove(video["file_path"])
-    except OSError:
-        pass
+    storage.delete(video["storage_key"])
 
     cursor.execute("DELETE FROM videos WHERE id = ?", (video_id,))
     conn.commit()

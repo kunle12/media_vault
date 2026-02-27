@@ -152,7 +152,7 @@ MediaVault/
 | id | INTEGER | Primary key |
 | filename | TEXT | Unique stored filename |
 | original_filename | TEXT | Original file name |
-| file_path | TEXT | Path to stored file |
+| storage_key | TEXT | Storage key (local path or S3 key) |
 | file_size | INTEGER | File size in bytes |
 | uploaded_at | TIMESTAMP | Upload timestamp |
 | user_id | INTEGER | Foreign key to users |

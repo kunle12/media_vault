@@ -39,7 +39,7 @@ The app runs on `http://localhost:5050`
 - `id` INTEGER PRIMARY KEY
 - `filename` TEXT (stored filename with UUID prefix)
 - `original_filename` TEXT
-- `file_path` TEXT
+- `storage_key` TEXT (local path or S3 key)
 - `file_size` INTEGER
 - `uploaded_at` TIMESTAMP
 - `user_id` INTEGER (FK to users)
@@ -59,10 +59,14 @@ The app runs on `http://localhost:5050`
 |----------|---------|-------------|
 | SECRET_KEY | auto-generated | Flask secret key |
 | ALLOWED_EMAILS | - | Whitespace-separated allowed email addresses |
-| UPLOAD_FOLDER | uploads | Media storage directory |
+| UPLOAD_FOLDER | uploads | Media storage directory (local only) |
 | DATABASE | videodb.sqlite | SQLite database |
 | MAX_CONTENT_LENGTH | 524288000 | 500MB max upload |
 | CACHE_TYPE | simple | simple or redis |
+| S3_BUCKET | - | S3 bucket name (enables S3 storage) |
+| S3_PREFIX | - | S3 key prefix |
+| AWS_REGION | - | AWS region for S3 |
+| AWS_DEFAULT_REGION | - | AWS default region |
 | EMAIL_PROVIDER | generic | generic or aws_ses |
 | SMTP_HOST | - | SMTP server |
 | SMTP_PORT | 587 | SMTP port |
