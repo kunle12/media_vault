@@ -7,9 +7,9 @@ services:
       - "5050:5050"
     volumes:
       - uploads:/app/uploads
-      - ./allowed_emails.txt:/app/allowed_emails.txt:ro
     environment:
       - SECRET_KEY=${SECRET_KEY:-}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS:-}
       - DATABASE=/app/videodb.sqlite
       - UPLOAD_FOLDER=/app/uploads
       - CACHE_TYPE=simple

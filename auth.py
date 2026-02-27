@@ -25,10 +25,9 @@ RATE_LIMIT_SECONDS = 60  # Prevent spam
 
 
 def load_allowed_emails():
-    emails_file = os.environ.get("ALLOWED_EMAILS_FILE", "allowed_emails.txt")
-    if os.path.exists(emails_file):
-        with open(emails_file, "r") as f:
-            return {line.strip().lower() for line in f if line.strip()}
+    emails_env = os.environ.get("ALLOWED_EMAILS", "")
+    if emails_env:
+        return {email.strip().lower() for email in emails_env.split() if email.strip()}
     return set()
 
 

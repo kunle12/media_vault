@@ -33,11 +33,9 @@ A Flask-based personal multimedia management application that allows users to up
    pip install -r requirements.txt
    ```
 
-4. Configure allowed emails by editing `allowed_emails.txt`:
+4. Configure allowed emails by setting the `ALLOWED_EMAILS` environment variable (whitespace-separated emails):
    ```
-   user@example.com
-   admin@example.com
-   your-email@domain.com
+   export ALLOWED_EMAILS="user@example.com admin@example.com your-email@domain.com"
    ```
 
 5. (Optional) Create an `.env` file to override defaults:
@@ -89,7 +87,7 @@ MediaVault uses **passwordless email authentication**:
 
 ### Allowed Emails
 
-Edit `allowed_emails.txt` to add or remove users who can access the application. Each email should be on a separate line.
+Set the `ALLOWED_EMAILS` environment variable with whitespace-separated email addresses to control who can access the application.
 
 ### Email Configuration
 
@@ -108,7 +106,6 @@ The app supports multiple email providers:
 MediaVault/
 ├── app.py                   # Main application file
 ├── auth.py                  # Authentication blueprint
-├── allowed_emails.txt       # List of allowed email addresses
 ├── requirements.txt         # Python dependencies
 ├── README.md                # Documentation
 ├── Dockerfile               # Docker configuration

@@ -19,7 +19,6 @@ MediaVault is a Flask-based personal multimedia management application with pass
 | `app.py` | Main Flask application - routes, database, upload handling |
 | `auth.py` | Authentication blueprint - email verification codes |
 | `templates/` | Jinja2 HTML templates |
-| `allowed_emails.txt` | Whitelist of authorized users |
 
 ## Running the App
 
@@ -48,7 +47,7 @@ The app runs on `http://localhost:5050`
 ## Authentication Flow
 
 1. User enters email in auth modal
-2. System checks if email is in `allowed_emails.txt`
+2. System checks if email is in `ALLOWED_EMAILS` env var
 3. 6-character verification code generated (valid 5 minutes, 5 attempts max)
 4. Code sent via email (or debug printed to console if no SMTP configured)
 5. User enters code to login
@@ -59,6 +58,7 @@ The app runs on `http://localhost:5050`
 | Variable | Default | Description |
 |----------|---------|-------------|
 | SECRET_KEY | auto-generated | Flask secret key |
+| ALLOWED_EMAILS | - | Whitespace-separated allowed email addresses |
 | UPLOAD_FOLDER | uploads | Media storage directory |
 | DATABASE | videodb.sqlite | SQLite database |
 | MAX_CONTENT_LENGTH | 524288000 | 500MB max upload |
