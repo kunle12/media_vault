@@ -15,7 +15,6 @@ from flask import (
     url_for,
 )
 from flask_caching import Cache
-from werkzeug.utils import secure_filename
 
 from auth import auth_bp
 
@@ -162,7 +161,7 @@ def upload():
             return redirect(request.url)
 
         if file and allowed_file(file.filename):
-            original_filename = secure_filename(file.filename or "")
+            original_filename = file.filename
             if not original_filename:
                 flash("Invalid filename", "error")
                 return redirect(request.url)
