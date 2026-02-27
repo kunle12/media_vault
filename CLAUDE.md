@@ -18,8 +18,26 @@ MediaVault is a Flask-based personal multimedia management application with pass
 |------|---------|
 | `app.py` | Main Flask application - routes, database, upload handling |
 | `auth.py` | Authentication blueprint - email verification codes |
+| `config.py` | Centralized configuration management with cached env vars |
 | `storage.py` | Storage backend - local filesystem and AWS S3 support |
 | `templates/` | Jinja2 HTML templates |
+
+## Configuration
+
+All environment variables are accessed through the `Config` class in `config.py`. Use `Config.METHOD()` to get cached values:
+
+```python
+from config import Config
+
+# Get cached config values
+secret_key = Config.SECRET_KEY()
+upload_folder = Config.UPLOAD_FOLDER()
+s3_enabled = Config.S3_ENABLED()
+google_oauth_enabled = Config.GOOGLE_OAUTH_ENABLED()
+
+# Helper functions
+from config import is_s3_enabled, is_google_oauth_enabled, get_smtp_config, get_allowed_emails
+```
 
 ## Running the App
 

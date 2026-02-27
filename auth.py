@@ -1,6 +1,5 @@
 """Authentication blueprint for email-based passwordless login."""
 
-import os
 import random
 import smtplib
 import sqlite3
@@ -10,25 +9,73 @@ from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import requests
 from flask import (
     Blueprint,
     current_app,
     jsonify,
+    redirect,
     request,
     session,
+    url_for,
 )
 
+try:
+    from authlib.integrations.flask_client import OAuth
+except ImportError:
+    OAuth = None
+
+from config import Config
+from config import is_google_oauth_enabled as check_google_oauth
+
 auth_bp = Blueprint("auth", __name__)
+
+
+def is_google_oauth_enabled():
+    """Check if Google OAuth is configured."""
+    return check_google_oauth()
+
+
+def get_google_user_info(access_token):
+    """Fetch user info from Google OAuth2."""
+    try:
+        resp = requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def is_oauth_state_valid():
+    """Check if OAuth state exists and hasn't expired."""
+    oauth_state = session.get("oauth_state")
+    if not oauth_state:
+        return False
+    state_data = oauth_state.get("state")
+    timestamp = oauth_state.get("timestamp", 0)
+    if not state_data or not timestamp:
+        return False
+    if time.time() - timestamp > OAUTH_STATE_EXPIRY:
+        session.pop("oauth_state", None)
+        return False
+    return True
+
 
 CODE_EXPIRY_SECONDS = 300  # 5 minutes
 MAX_RETRY_ATTEMPTS = 5
 CODE_LENGTH = 6
 RATE_LIMIT_SECONDS = 60  # Prevent spam
+OAUTH_STATE_EXPIRY = 600  # 10 minutes
 
 
 def load_allowed_emails():
     """Load allowed emails from ALLOWED_EMAILS environment variable."""
-    emails_env = os.environ.get("ALLOWED_EMAILS", "")
+    emails_env = Config.ALLOWED_EMAILS()
     if emails_env:
         return {email.strip().lower() for email in emails_env.split() if email.strip()}
     return set()
@@ -93,24 +140,21 @@ def is_code_expired(code_data):
 
 def send_email(to_email, code):
     """Send verification email with the code."""
-    email_provider = os.environ.get("EMAIL_PROVIDER", "generic").lower()
+    email_provider = Config.EMAIL_PROVIDER()
 
-    smtp_host = os.environ.get("SMTP_HOST", "")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_password = os.environ.get("SMTP_PASSWORD", "")
-    from_email = os.environ.get("FROM_EMAIL", smtp_user)
+    smtp_host = Config.SMTP_HOST()
+    smtp_port = Config.SMTP_PORT()
+    smtp_user = Config.SMTP_USER()
+    smtp_password = Config.SMTP_PASSWORD()
+    from_email = Config.FROM_EMAIL()
 
     if not smtp_user or not smtp_password:
         print(f"[DEBUG] Email would be sent to {to_email} with code: {code}")
         return True
 
     if email_provider == "aws_ses":
-        smtp_host = (
-            smtp_host
-            or f"email-smtp.{os.environ.get('AWS_REGION', 'us-east-1')}.amazonaws.com"
-        )
-        smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        aws_region = Config.AWS_REGION()
+        smtp_host = smtp_host or f"email-smtp.{aws_region}.amazonaws.com"
 
     try:
         msg = MIMEMultipart("alternative")
@@ -292,6 +336,104 @@ def logout():
 @auth_bp.route("/auth/status", methods=["GET"])
 def status():
     """Check if user is authenticated."""
-    if "user_id" in session:
-        return jsonify({"authenticated": True, "email": session.get("email", "")})
-    return jsonify({"authenticated": False})
+    return jsonify(
+        {
+            "authenticated": "user_id" in session,
+            "email": session.get("email", ""),
+            "google_oauth_enabled": is_google_oauth_enabled(),
+        }
+    )
+
+
+@auth_bp.route("/auth/google/login", methods=["GET"])
+def google_login():
+    """Initiate Google OAuth flow."""
+    if not is_google_oauth_enabled():
+        return redirect(url_for("trigger_auth"))
+
+    from authlib.integrations.requests_client import OAuth2Session
+
+    client_id = Config.GOOGLE_CLIENT_ID()
+    redirect_uri = url_for("auth.google_callback", _external=True)
+
+    client = OAuth2Session(client_id, scope="openid email profile")
+    authorization_url, state = client.create_authorization_url(
+        "https://accounts.google.com/o/oauth2/v2/auth",
+        redirect_uri=redirect_uri,
+    )
+    session["oauth_state"] = {"state": state, "timestamp": time.time()}
+    return redirect(authorization_url)
+
+
+@auth_bp.route("/auth/google/callback", methods=["GET"])
+def google_callback():
+    """Handle Google OAuth callback."""
+    if not is_google_oauth_enabled():
+        return redirect(url_for("trigger_auth"))
+
+    error = request.args.get("error")
+    if error:
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    code = request.args.get("code")
+    state = request.args.get("state")
+
+    if not code or not state:
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    if not is_oauth_state_valid():
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    if state != session.get("oauth_state", {}).get("state"):
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    from authlib.integrations.requests_client import OAuth2Session
+
+    client_id = Config.GOOGLE_CLIENT_ID()
+    client_secret = Config.GOOGLE_CLIENT_SECRET()
+    redirect_uri = url_for("auth.google_callback", _external=True)
+
+    client = OAuth2Session(client_id, state=state)
+    token = client.fetch_token(
+        "https://oauth2.googleapis.com/token",
+        code=code,
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+    )
+
+    access_token = token.get("access_token")
+    if not access_token:
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    user_info = get_google_user_info(access_token)
+    if not user_info:
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    if not user_info.get("verified_email", False):
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    email = user_info.get("email", "").lower()
+    if not email:
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    allowed_emails = load_allowed_emails()
+    if allowed_emails and email not in allowed_emails:
+        session.pop("oauth_state", None)
+        return redirect(url_for("trigger_auth"))
+
+    user_id = ensure_user_exists(email)
+    session["user_id"] = user_id
+    session["email"] = email
+    session.permanent = True
+    session.pop("oauth_state", None)
+
+    return redirect(url_for("dashboard"))

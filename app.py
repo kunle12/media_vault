@@ -17,40 +17,28 @@ from flask import (
 )
 from flask_caching import Cache
 
-from auth import auth_bp
+from auth import auth_bp, is_google_oauth_enabled
+from config import Config
 from storage import get_storage_backend, is_s3_enabled
 
-# App configuration
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
+app.config["SECRET_KEY"] = Config.SECRET_KEY()
 app.config["WTF_CSRF_ENABLED"] = True
 app.config["WTF_CSRF_TIME_LIMIT"] = None
-app.config["UPLOAD_FOLDER"] = os.environ.get("UPLOAD_FOLDER", "uploads")
-app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500 MB max upload
-app.config["ALLOWED_EXTENSIONS"] = {
-    "mp4",
-    "avi",
-    "mov",
-    "mkv",
-    "wmv",
-    "flv",
-    "webm",
-    "mp3",
-    "wav",
-    "ogg",
-}
-app.config["DATABASE"] = os.environ.get("DATABASE", "videodb.sqlite")
+app.config["UPLOAD_FOLDER"] = Config.UPLOAD_FOLDER()
+app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH
+app.config["ALLOWED_EXTENSIONS"] = Config.ALLOWED_EXTENSIONS
+app.config["DATABASE"] = Config.DATABASE()
 
-# Cache configuration
-cache_type = os.environ.get("CACHE_TYPE", "simple")
+cache_type = Config.CACHE_TYPE()
 if cache_type == "redis":
-    app.config["CACHE_REDIS_URL"] = os.environ.get(
-        "CACHE_REDIS_URL", "redis://localhost:6379/0"
-    )
+    app.config["CACHE_REDIS_URL"] = Config.CACHE_REDIS_URL()
 app.config["CACHE_TYPE"] = cache_type
-app.config["CACHE_DEFAULT_TIMEOUT"] = 300
+app.config["CACHE_DEFAULT_TIMEOUT"] = Config.CACHE_DEFAULT_TIMEOUT
 
 cache = Cache(app)
+
+app.config["GOOGLE_OAUTH_ENABLED"] = is_google_oauth_enabled()
 
 app.register_blueprint(auth_bp)
 

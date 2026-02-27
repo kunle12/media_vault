@@ -5,8 +5,11 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 import boto3
-from botocore.config import Config
+from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
+
+from config import Config
+from config import is_s3_enabled as config_is_s3_enabled
 
 
 class StorageBackend(ABC):
@@ -84,7 +87,7 @@ class S3Storage(StorageBackend):
         self.bucket = bucket
         self.prefix = prefix.rstrip("/") + "/" if prefix else ""
 
-        config = Config(region_name=region or "us-east-1")
+        config = BotoConfig(region_name=region or "us-east-1")
         client_kwargs = {"config": config}
         if endpoint_url:
             client_kwargs["endpoint_url"] = endpoint_url
@@ -147,17 +150,17 @@ class S3Storage(StorageBackend):
 
 def get_storage_backend() -> StorageBackend:
     """Factory function to get the appropriate storage backend."""
-    s3_bucket = os.environ.get("S3_BUCKET")
+    s3_bucket = Config.S3_BUCKET()
     if s3_bucket:
-        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
-        prefix = os.environ.get("S3_PREFIX", "")
-        endpoint_url = os.environ.get("S3_ENDPOINT")
+        region = Config.AWS_REGION() or Config.AWS_DEFAULT_REGION()
+        prefix = Config.S3_PREFIX() or ""
+        endpoint_url = Config.S3_ENDPOINT()
         return S3Storage(s3_bucket, region, prefix, endpoint_url)
 
-    upload_folder = os.environ.get("UPLOAD_FOLDER", "uploads")
+    upload_folder = Config.UPLOAD_FOLDER()
     return LocalStorage(upload_folder)
 
 
 def is_s3_enabled() -> bool:
     """Check if S3 storage is configured."""
-    return bool(os.environ.get("S3_BUCKET"))
+    return config_is_s3_enabled()
