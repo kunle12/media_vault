@@ -114,15 +114,27 @@ class S3Storage(StorageBackend):
         response = self.client.get_object(Bucket=self.bucket, Key=key)
         return response["Body"].read()
 
-    def get_url(self, key: str, filename: str, expires_in: int = 3600) -> str:
+    def get_url(
+        self, key: str, filename: str, expires_in: int = 3600, inline: bool = False
+    ) -> str:
         """Generate presigned URL for S3 object."""
         try:
+            disposition = "inline" if inline else "attachment"
+            try:
+                filename.encode("ascii")
+                filename_param = f'filename="{filename}"'
+            except UnicodeEncodeError:
+                import urllib.parse
+
+                encoded = urllib.parse.quote(filename)
+                filename_param = f"filename*=UTF-8''{encoded}"
+
             return self.client.generate_presigned_url(
                 "get_object",
                 Params={
                     "Bucket": self.bucket,
                     "Key": key,
-                    "ResponseContentDisposition": f'attachment; filename="{filename}"',
+                    "ResponseContentDisposition": f"{disposition}; {filename_param}",
                 },
                 ExpiresIn=expires_in,
             )

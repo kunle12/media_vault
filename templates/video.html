@@ -15,12 +15,12 @@
         {% set ext = video.original_filename.split('.')[-1].lower() %}
         {% if ext in ['mp3', 'wav', 'ogg'] %}
         <audio controls class="w-full" preload="metadata">
-            {% if ext == 'mp3' %}<source src="{{ url_for('download_media', media_id=video.id) }}" type="audio/mpeg">{% elif ext == 'wav' %}<source src="{{ url_for('download_media', media_id=video.id) }}" type="audio/wav">{% else %}<source src="{{ url_for('download_media', media_id=video.id) }}" type="audio/ogg">{% endif %}
+            {% if ext == 'mp3' %}<source src="{{ url_for('play_media', media_id=video.id) }}" type="audio/mpeg">{% elif ext == 'wav' %}<source src="{{ url_for('play_media', media_id=video.id) }}" type="audio/wav">{% else %}<source src="{{ url_for('play_media', media_id=video.id) }}" type="audio/ogg">{% endif %}
             Your browser does not support the audio tag.
         </audio>
         {% else %}
         <video controls class="w-full max-h-96 rounded" preload="metadata">
-            <source src="{{ url_for('download_media', media_id=video.id) }}" type="video/{{ ext }}">
+            <source src="{{ url_for('play_media', media_id=video.id) }}" type="video/{{ ext }}">
             Your browser does not support the video tag.
         </video>
         {% endif %}

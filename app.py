@@ -232,6 +232,83 @@ def view_media(media_id):
     return render_template("video.html", video=media)
 
 
+def encode_filename_for_header(filename: str) -> str:
+    """Encode filename for Content-Disposition header per RFC 5987."""
+    try:
+        filename.encode("ascii")
+        return f'filename="{filename}"'
+    except UnicodeEncodeError:
+        import urllib.parse
+
+        encoded = urllib.parse.quote(filename)
+        return f"filename*=UTF-8''{encoded}"
+
+
+def get_mime_type(filename: str) -> str:
+    """Get MIME type based on file extension."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    mime_types = {
+        "mp4": "video/mp4",
+        "avi": "video/x-msvideo",
+        "mov": "video/quicktime",
+        "mkv": "video/x-matroska",
+        "wmv": "video/x-ms-wmv",
+        "flv": "video/x-flv",
+        "webm": "video/webm",
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "ogg": "audio/ogg",
+    }
+    return mime_types.get(ext, "application/octet-stream")
+
+
+@app.route("/media/<int:media_id>/play")
+@login_required
+def play_media(media_id):
+    """Stream a media file by ID for playback."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM media WHERE id = ? AND user_id = ?",
+        (media_id, session["user_id"]),
+    )
+    media = cursor.fetchone()
+    conn.close()
+
+    if not media:
+        flash("Media not found or you do not have permission to view it", "error")
+        return redirect(url_for("dashboard"))
+
+    mime_type = get_mime_type(media["original_filename"])
+
+    if is_s3_enabled():
+        presigned_url = storage.get_url(
+            media["storage_key"], media["original_filename"], inline=True
+        )
+        if presigned_url:
+            return redirect(presigned_url)
+        flash("Failed to generate stream URL", "error")
+        return redirect(url_for("dashboard"))
+    else:
+        file_path = media["storage_key"]
+
+        def generate():
+            with open(file_path, "rb") as f:
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        return Response(
+            generate(),
+            mimetype=mime_type,
+            headers={
+                "Accept-Ranges": "bytes",
+            },
+        )
+
+
 @app.route("/media/<int:media_id>/download")
 @login_required
 def download_media(media_id):
@@ -249,6 +326,8 @@ def download_media(media_id):
         flash("Media not found or you do not have permission to download it", "error")
         return redirect(url_for("dashboard"))
 
+    filename_header = encode_filename_for_header(media["original_filename"])
+
     if is_s3_enabled():
         presigned_url = storage.get_url(
             media["storage_key"], media["original_filename"]
@@ -263,7 +342,7 @@ def download_media(media_id):
             file_content,
             mimetype="application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{media["original_filename"]}"',
+                "Content-Disposition": f"attachment; {filename_header}",
                 "Content-Length": media["file_size"],
             },
         )

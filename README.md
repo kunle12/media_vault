@@ -6,8 +6,10 @@ A Flask-based personal multimedia management application that allows users to up
 
 - **Passwordless Authentication**: Email-based verification code login
 - **Media Upload**: Upload media files (media: mp4, avi, mov, mkv, wmv, flv, webm and audio: mp3, wav, ogg) up to 500MB
-- **Media Management**: View, download, and delete your uploaded files
+- **Media Management**: View, stream, download, and delete your uploaded files
 - **Dashboard**: Personal dashboard showing all your uploaded media
+- **Non-ASCII Filename Support**: Full support for filenames with non-ASCII characters (Chinese, Japanese, Russian, etc.)
+- **S3 Storage**: Optional AWS S3 (or compatible) storage backend
 - **Security**: Time-sensitive verification codes (5 min), rate limiting, session-based auth
 
 ## Requirements
@@ -106,6 +108,7 @@ The app supports multiple email providers:
 MediaVault/
 ├── app.py                   # Main application file
 ├── auth.py                  # Authentication blueprint
+├── storage.py               # Storage backend (local/S3)
 ├── requirements.txt         # Python dependencies
 ├── README.md                # Documentation
 ├── Dockerfile               # Docker configuration
@@ -134,6 +137,7 @@ MediaVault/
 | `/dashboard` | GET | User dashboard (protected) |
 | `/upload` | GET, POST | Media upload (protected) |
 | `/media/<id>` | GET | View media (protected) |
+| `/media/<id>/play` | GET | Stream media for playback (protected) |
 | `/media/<id>/download` | GET | Download media (protected) |
 | `/media/<id>/delete` | POST | Delete media (protected) |
 
@@ -186,6 +190,22 @@ The following configuration options can be set via environment variables:
 | SMTP_USER | SMTP username |
 | SMTP_PASSWORD | SMTP password |
 | FROM_EMAIL | Sender email address |
+
+### S3 Storage Configuration
+
+| Variable | Description |
+|----------|-------------|
+| S3_BUCKET | S3 bucket name (enables S3 storage) |
+| S3_PREFIX | S3 key prefix |
+| AWS_REGION | AWS region |
+| AWS_DEFAULT_REGION | AWS default region |
+| S3_ENDPOINT | Custom S3 endpoint (for MinIO, etc.) |
+
+### Non-ASCII Filename Support
+
+MediaVault properly handles filenames with non-ASCII characters (e.g., Chinese, Japanese, Russian). 
+Filenames are encoded using RFC 5987 (`filename*=UTF-8''...`) in Content-Disposition headers 
+to ensure browser compatibility for both streaming and download.
 
 ## Allowed File Formats
 

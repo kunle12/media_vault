@@ -18,6 +18,7 @@ MediaVault is a Flask-based personal multimedia management application with pass
 |------|---------|
 | `app.py` | Main Flask application - routes, database, upload handling |
 | `auth.py` | Authentication blueprint - email verification codes |
+| `storage.py` | Storage backend - local filesystem and AWS S3 support |
 | `templates/` | Jinja2 HTML templates |
 
 ## Running the App
@@ -86,6 +87,16 @@ The app runs on `http://localhost:5050`
 3. **Max retry attempts**: 5 per code
 4. **Session**: Permanent session with user_id stored in session
 5. **Upload**: Files saved with UUID prefix to avoid name collisions
+
+## Media Routes
+
+| Route | Purpose |
+|-------|---------|
+| `/media/<id>` | View media player page |
+| `/media/<id>/play` | Stream media for inline playback |
+| `/media/<id>/download` | Download media file (properly encodes non-ASCII filenames) |
+
+**Filename encoding**: Non-ASCII filenames in Content-Disposition headers are encoded using RFC 5987 (`filename*=UTF-8''...`) to ensure browser compatibility.
 
 ## Linting
 
