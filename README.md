@@ -119,7 +119,7 @@ MediaVault/
 │   ├── index.html          # Home page
 │   ├── dashboard.html      # User dashboard
 │   ├── upload.html         # Media upload page
-│   ├── video.html          # Media view page
+│   ├── media_view.html     # Media view page
 │   ├── auth_modals.html    # Authentication modals
 │   └── auth_trigger.html   # Auth trigger page
 └── uploads/                # Media storage directory (auto-created)
