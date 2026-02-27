@@ -74,12 +74,21 @@ class LocalStorage(StorageBackend):
 class S3Storage(StorageBackend):
     """AWS S3 storage backend."""
 
-    def __init__(self, bucket: str, region: Optional[str] = None, prefix: str = ""):
+    def __init__(
+        self,
+        bucket: str,
+        region: Optional[str] = None,
+        prefix: str = "",
+        endpoint_url: Optional[str] = None,
+    ):
         self.bucket = bucket
         self.prefix = prefix.rstrip("/") + "/" if prefix else ""
 
         config = Config(region_name=region or "us-east-1")
-        self.client = boto3.client("s3", config=config)
+        client_kwargs = {"config": config}
+        if endpoint_url:
+            client_kwargs["endpoint_url"] = endpoint_url
+        self.client = boto3.client("s3", **client_kwargs)
 
     def _get_key(self, filename: str) -> str:
         """Generate S3 key for filename."""
@@ -130,7 +139,8 @@ def get_storage_backend() -> StorageBackend:
     if s3_bucket:
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
         prefix = os.environ.get("S3_PREFIX", "")
-        return S3Storage(s3_bucket, region, prefix)
+        endpoint_url = os.environ.get("S3_ENDPOINT")
+        return S3Storage(s3_bucket, region, prefix, endpoint_url)
 
     upload_folder = os.environ.get("UPLOAD_FOLDER", "uploads")
     return LocalStorage(upload_folder)

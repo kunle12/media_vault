@@ -12,10 +12,18 @@
     </div>
     
     <div class="bg-white p-6 rounded-lg shadow mb-6">
+        {% set ext = video.original_filename.split('.')[-1].lower() %}
+        {% if ext in ['mp3', 'wav', 'ogg'] %}
+        <audio controls class="w-full" preload="metadata">
+            <source src="{{ url_for('download_video', video_id=video.id) }}" type="audio/{{ ext }}">
+            Your browser does not support the audio tag.
+        </audio>
+        {% else %}
         <video controls class="w-full max-h-96 rounded" preload="metadata">
-            <source src="{{ url_for('download_video', video_id=video.id) }}" type="video/mp4">
+            <source src="{{ url_for('download_video', video_id=video.id) }}" type="video/{{ ext }}">
             Your browser does not support the video tag.
         </video>
+        {% endif %}
     </div>
     
     <div class="bg-white p-6 rounded-lg shadow">
