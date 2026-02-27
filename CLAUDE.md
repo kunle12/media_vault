@@ -35,7 +35,7 @@ The app runs on `http://localhost:5050`
 - `email` TEXT UNIQUE
 - `created_at` TIMESTAMP
 
-### videos
+### media
 - `id` INTEGER PRIMARY KEY
 - `filename` TEXT (stored filename with UUID prefix)
 - `original_filename` TEXT
@@ -107,7 +107,7 @@ from app import get_db_connection
 
 conn = get_db_connection()
 cursor = conn.cursor()
-cursor.execute("SELECT * FROM videos WHERE user_id = ?", (session["user_id"],))
-videos = cursor.fetchall()
+cursor.execute("SELECT * FROM media WHERE user_id = ?", (session["user_id"],))
+media = cursor.fetchall()
 conn.close()
 ```

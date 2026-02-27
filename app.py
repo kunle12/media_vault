@@ -81,7 +81,7 @@ def init_db():
         """)
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS videos (
+        CREATE TABLE IF NOT EXISTS media (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
             original_filename TEXT NOT NULL,
@@ -94,7 +94,7 @@ def init_db():
         """)
 
         cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id)"
+            "CREATE INDEX IF NOT EXISTS idx_media_user_id ON media(user_id)"
         )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
 
@@ -149,16 +149,16 @@ def trigger_auth():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    """User dashboard showing their uploaded videos."""
+    """User dashboard showing their uploaded media."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT * FROM videos WHERE user_id = ? ORDER BY uploaded_at DESC",
+        "SELECT * FROM media WHERE user_id = ? ORDER BY uploaded_at DESC",
         (session["user_id"],),
     )
-    videos = cursor.fetchall()
+    media = cursor.fetchall()
     conn.close()
-    return render_template("dashboard.html", videos=videos)
+    return render_template("dashboard.html", media=media)
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -195,7 +195,7 @@ def upload():
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO videos (filename, original_filename, storage_key, file_size, user_id) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO media (filename, original_filename, storage_key, file_size, user_id) VALUES (?, ?, ?, ?, ?)",
                 (
                     unique_filename,
                     original_filename,
@@ -223,7 +223,7 @@ def view_video(video_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT * FROM videos WHERE id = ? AND user_id = ?",
+        "SELECT * FROM media WHERE id = ? AND user_id = ?",
         (video_id, session["user_id"]),
     )
     video = cursor.fetchone()
@@ -243,7 +243,7 @@ def download_video(video_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT * FROM videos WHERE id = ? AND user_id = ?",
+        "SELECT * FROM media WHERE id = ? AND user_id = ?",
         (video_id, session["user_id"]),
     )
     video = cursor.fetchone()
@@ -278,7 +278,7 @@ def delete_video(video_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT * FROM videos WHERE id = ? AND user_id = ?",
+        "SELECT * FROM media WHERE id = ? AND user_id = ?",
         (video_id, session["user_id"]),
     )
     video = cursor.fetchone()
@@ -290,7 +290,7 @@ def delete_video(video_id):
 
     storage.delete(video["storage_key"])
 
-    cursor.execute("DELETE FROM videos WHERE id = ?", (video_id,))
+    cursor.execute("DELETE FROM media WHERE id = ?", (video_id,))
     conn.commit()
     conn.close()
 

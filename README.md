@@ -5,7 +5,7 @@ A Flask-based personal multimedia management application that allows users to up
 ## Features
 
 - **Passwordless Authentication**: Email-based verification code login
-- **Media Upload**: Upload media files (videos: mp4, avi, mov, mkv, wmv, flv, webm and audio: mp3, wav, ogg) up to 500MB
+- **Media Upload**: Upload media files (media: mp4, avi, mov, mkv, wmv, flv, webm and audio: mp3, wav, ogg) up to 500MB
 - **Media Management**: View, download, and delete your uploaded files
 - **Dashboard**: Personal dashboard showing all your uploaded media
 - **Security**: Time-sensitive verification codes (5 min), rate limiting, session-based auth
@@ -146,7 +146,7 @@ MediaVault/
 | email | TEXT | Unique email |
 | created_at | TIMESTAMP | First login timestamp |
 
-### videos
+### media
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER | Primary key |
@@ -158,7 +158,7 @@ MediaVault/
 | user_id | INTEGER | Foreign key to users |
 
 ### Database Indexes
-- `idx_videos_user_id` on `videos(user_id)`
+- `idx_media_user_id` on `media(user_id)`
 - `idx_users_email` on `users(email)`
 
 ## Configuration
