@@ -19,7 +19,7 @@ from flask_caching import Cache
 
 from auth import auth_bp, is_google_oauth_enabled
 from config import Config
-from storage import get_storage_backend, is_s3_enabled
+from storage import S3UploadError, StorageError, get_storage_backend, is_s3_enabled
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = Config.SECRET_KEY()
@@ -150,52 +150,77 @@ def dashboard():
 @app.route("/upload", methods=["GET", "POST"])
 @login_required
 def upload():
-    """Handle file upload - GET shows form, POST processes upload."""
+    """Handle file upload - GET shows form, POST processes uploads."""
     if request.method == "POST":
-        if "video" not in request.files:
-            flash("No file part", "error")
-            return redirect(request.url)
+        files = request.files.getlist("files")
 
-        file = request.files["video"]
-
-        if file.filename == "":
+        if not files or all(f.filename == "" for f in files):
             flash("No selected file", "error")
             return redirect(request.url)
 
-        if file and allowed_file(file.filename):
-            original_filename = os.path.basename(file.filename or "")
-            unique_filename = f"{uuid.uuid4()}_{original_filename}"
+        uploaded_count = 0
+        error_count = 0
+        s3_error = None
 
-            file_size = 0
-            if is_s3_enabled():
-                file.seek(0, os.SEEK_END)
-                file_size = file.tell()
-                file.seek(0)
-                storage_key = storage.save(file, unique_filename)
+        for file in files:
+            if file.filename == "":
+                continue
+
+            if file and allowed_file(file.filename):
+                original_filename = os.path.basename(file.filename or "")
+                unique_filename = f"{uuid.uuid4()}_{original_filename}"
+
+                try:
+                    file_size = 0
+                    if is_s3_enabled():
+                        file.seek(0, os.SEEK_END)
+                        file_size = file.tell()
+                        file.seek(0)
+                    storage_key = storage.save(file, unique_filename)
+                    if not is_s3_enabled():
+                        file_size = os.path.getsize(storage_key)
+
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO media (filename, original_filename, storage_key, file_size, user_id) VALUES (?, ?, ?, ?, ?)",
+                        (
+                            unique_filename,
+                            original_filename,
+                            storage_key,
+                            file_size,
+                            session["user_id"],
+                        ),
+                    )
+                    conn.commit()
+                    conn.close()
+
+                    uploaded_count += 1
+                except S3UploadError as e:
+                    s3_error = str(e)
+                    break
+                except StorageError as e:
+                    s3_error = str(e)
+                    break
+                except Exception as e:
+                    s3_error = f"Unexpected error: {str(e)}"
+                    break
             else:
-                storage_key = storage.save(file, unique_filename)
-                file_size = os.path.getsize(storage_key)
+                error_count += 1
 
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO media (filename, original_filename, storage_key, file_size, user_id) VALUES (?, ?, ?, ?, ?)",
-                (
-                    unique_filename,
-                    original_filename,
-                    storage_key,
-                    file_size,
-                    session["user_id"],
-                ),
-            )
-            conn.commit()
-            conn.close()
+        if s3_error:
+            flash(f"Upload failed: {s3_error}", "error")
+            if uploaded_count > 0:
+                flash(f"{uploaded_count} file(s) uploaded before error", "warning")
+        elif uploaded_count > 0:
+            if uploaded_count == 1:
+                flash("File uploaded successfully!", "success")
+            else:
+                flash(f"{uploaded_count} files uploaded successfully!", "success")
+        if error_count > 0:
+            flash(f"{error_count} file(s) skipped - invalid file type", "error")
 
-            flash("Video successfully uploaded!", "success")
-            return redirect(url_for("dashboard"))
-        else:
-            flash("File type not allowed", "error")
-            return redirect(request.url)
+        return redirect(url_for("dashboard"))
 
     return render_template("upload.html")
 
@@ -270,31 +295,40 @@ def play_media(media_id):
     mime_type = get_mime_type(media["original_filename"])
 
     if is_s3_enabled():
-        presigned_url = storage.get_url(
-            media["storage_key"], media["original_filename"], inline=True
-        )
-        if presigned_url:
+        try:
+            presigned_url = storage.get_url(
+                media["storage_key"], media["original_filename"]
+            )
             return redirect(presigned_url)
-        flash("Failed to generate stream URL", "error")
-        return redirect(url_for("dashboard"))
+        except StorageError as e:
+            flash(f"Failed to generate stream URL: {e}", "error")
+            return redirect(url_for("dashboard"))
     else:
         file_path = media["storage_key"]
 
-        def generate():
-            with open(file_path, "rb") as f:
-                while True:
-                    chunk = f.read(8192)
-                    if not chunk:
-                        break
-                    yield chunk
+        try:
 
-        return Response(
-            generate(),
-            mimetype=mime_type,
-            headers={
-                "Accept-Ranges": "bytes",
-            },
-        )
+            def generate():
+                with open(file_path, "rb") as f:
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        yield chunk
+
+            return Response(
+                generate(),
+                mimetype=mime_type,
+                headers={
+                    "Accept-Ranges": "bytes",
+                },
+            )
+        except FileNotFoundError:
+            flash("File not found on disk", "error")
+            return redirect(url_for("dashboard"))
+        except StorageError as e:
+            flash(f"Failed to read file: {e}", "error")
+            return redirect(url_for("dashboard"))
 
 
 @app.route("/media/<int:media_id>/download")
@@ -317,15 +351,23 @@ def download_media(media_id):
     filename_header = encode_filename_for_header(media["original_filename"])
 
     if is_s3_enabled():
-        presigned_url = storage.get_url(
-            media["storage_key"], media["original_filename"]
-        )
-        if presigned_url:
+        try:
+            presigned_url = storage.get_url(
+                media["storage_key"], media["original_filename"]
+            )
             return redirect(presigned_url)
-        flash("Failed to generate download URL", "error")
-        return redirect(url_for("dashboard"))
+        except StorageError as e:
+            flash(f"Failed to generate download URL: {e}", "error")
+            return redirect(url_for("dashboard"))
     else:
-        file_content = storage.get_file(media["storage_key"])
+        try:
+            file_content = storage.get_file(media["storage_key"])
+        except FileNotFoundError:
+            flash("File not found on disk", "error")
+            return redirect(url_for("dashboard"))
+        except StorageError as e:
+            flash(f"Failed to read file: {e}", "error")
+            return redirect(url_for("dashboard"))
         return Response(
             file_content,
             mimetype="application/octet-stream",
@@ -353,7 +395,11 @@ def delete_media(media_id):
         flash("Media not found or you do not have permission to delete it", "error")
         return redirect(url_for("dashboard"))
 
-    storage.delete(media["storage_key"])
+    try:
+        storage.delete(media["storage_key"])
+    except StorageError as e:
+        flash(f"Failed to delete file: {e}", "error")
+        return redirect(url_for("dashboard"))
 
     cursor.execute("DELETE FROM media WHERE id = ?", (media_id,))
     conn.commit()

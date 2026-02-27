@@ -6,10 +6,47 @@ from typing import Any, Optional
 
 import boto3
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
 
 from config import Config
 from config import is_s3_enabled as config_is_s3_enabled
+
+
+class StorageError(Exception):
+    """Base exception for storage errors."""
+
+    def __init__(self, message: str, is_retryable: bool = False):
+        super().__init__(message)
+        self.message = message
+        self.is_retryable = is_retryable
+
+
+class S3ConnectionError(StorageError):
+    """Exception raised when S3 connection fails."""
+
+    def __init__(self, message: str = "Failed to connect to S3 storage"):
+        super().__init__(message, is_retryable=True)
+
+
+class S3UploadError(StorageError):
+    """Exception raised when S3 upload fails."""
+
+    def __init__(self, message: str = "Failed to upload file to S3"):
+        super().__init__(message, is_retryable=True)
+
+
+class S3DownloadError(StorageError):
+    """Exception raised when S3 download fails."""
+
+    def __init__(self, message: str = "Failed to download file from S3"):
+        super().__init__(message, is_retryable=False)
+
+
+class S3DeleteError(StorageError):
+    """Exception raised when S3 delete fails."""
+
+    def __init__(self, message: str = "Failed to delete file from S3"):
+        super().__init__(message, is_retryable=False)
 
 
 class StorageBackend(ABC):
@@ -41,15 +78,38 @@ class StorageBackend(ABC):
         pass
 
 
+VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "wmv", "flv", "webm"}
+AUDIO_EXTENSIONS = {"mp3", "wav", "ogg"}
+
+
+def get_media_subdir(filename: str) -> str:
+    """Determine subdirectory based on file extension."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext in VIDEO_EXTENSIONS:
+        return "videos"
+    if ext in AUDIO_EXTENSIONS:
+        return "audios"
+    return "videos"
+
+
 class LocalStorage(StorageBackend):
     """Local filesystem storage backend."""
 
     def __init__(self, upload_folder: str):
         self.upload_folder = upload_folder
+        self.videos_dir = os.path.join(upload_folder, "videos")
+        self.audios_dir = os.path.join(upload_folder, "audios")
+        os.makedirs(self.videos_dir, exist_ok=True)
+        os.makedirs(self.audios_dir, exist_ok=True)
 
     def save(self, file_obj: Any, filename: str) -> str:
-        """Save file to local disk."""
-        file_path = os.path.join(self.upload_folder, filename)
+        """Save file to local disk in appropriate subdirectory."""
+        subdir = get_media_subdir(filename)
+        if subdir == "videos":
+            target_dir = self.videos_dir
+        else:
+            target_dir = self.audios_dir
+        file_path = os.path.join(target_dir, filename)
         file_obj.save(file_path)
         return file_path
 
@@ -63,8 +123,11 @@ class LocalStorage(StorageBackend):
 
     def get_file(self, key: str) -> bytes:
         """Read file from local disk."""
-        with open(key, "rb") as f:
-            return f.read()
+        try:
+            with open(key, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            raise StorageError(f"File not found: {key}", is_retryable=False)
 
     def get_url(self, key: str, filename: str, expires_in: int = 3600) -> str:
         """Local files don't need presigned URLs."""
@@ -94,14 +157,18 @@ class S3Storage(StorageBackend):
         self.client = boto3.client("s3", **client_kwargs)
 
     def _get_key(self, filename: str) -> str:
-        """Generate S3 key for filename."""
-        return f"{self.prefix}{filename}"
+        """Generate S3 key for filename with subdirectory."""
+        subdir = get_media_subdir(filename)
+        return f"{self.prefix}{subdir}/{filename}"
 
     def save(self, file_obj: Any, filename: str) -> str:
         """Upload file to S3 and return the S3 key."""
         key = self._get_key(filename)
         file_obj.seek(0)
-        self.client.upload_fileobj(file_obj, self.bucket, key)
+        try:
+            self.client.upload_fileobj(file_obj, self.bucket, key)
+        except (ClientError, BotoCoreError, EndpointConnectionError) as e:
+            raise S3UploadError(f"Failed to upload to S3: {str(e)}")
         return key
 
     def delete(self, key: str) -> bool:
@@ -109,20 +176,23 @@ class S3Storage(StorageBackend):
         try:
             self.client.delete_object(Bucket=self.bucket, Key=key)
             return True
-        except ClientError:
-            return False
+        except (ClientError, BotoCoreError, EndpointConnectionError) as e:
+            raise S3DeleteError(f"Failed to delete from S3: {str(e)}")
 
     def get_file(self, key: str) -> bytes:
         """Download file content from S3."""
-        response = self.client.get_object(Bucket=self.bucket, Key=key)
-        return response["Body"].read()
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=key)
+            return response["Body"].read()
+        except (ClientError, BotoCoreError, EndpointConnectionError) as e:
+            raise S3DownloadError(f"Failed to download from S3: {str(e)}")
 
     def get_url(
         self, key: str, filename: str, expires_in: int = 3600, inline: bool = False
     ) -> str:
         """Generate presigned URL for S3 object."""
+        disposition = "inline" if inline else "attachment"
         try:
-            disposition = "inline" if inline else "attachment"
             try:
                 filename.encode("ascii")
                 filename_param = f'filename="{filename}"'
@@ -141,8 +211,8 @@ class S3Storage(StorageBackend):
                 },
                 ExpiresIn=expires_in,
             )
-        except ClientError:
-            return ""
+        except (ClientError, BotoCoreError, EndpointConnectionError) as e:
+            raise S3DownloadError(f"Failed to generate download URL: {str(e)}")
 
     def is_s3(self) -> bool:
         return True

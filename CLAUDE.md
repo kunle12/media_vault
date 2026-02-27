@@ -105,6 +105,8 @@ The app runs on `http://localhost:5050`
 3. **Max retry attempts**: 5 per code
 4. **Session**: Permanent session with user_id stored in session
 5. **Upload**: Files saved with UUID prefix to avoid name collisions
+6. **Multi-file upload**: Supports uploading multiple files at once
+7. **Storage organization**: Files stored in subdirectories (videos/audios) based on extension
 
 ## Media Routes
 
@@ -140,3 +142,15 @@ cursor.execute("SELECT * FROM media WHERE user_id = ?", (session["user_id"],))
 media = cursor.fetchall()
 conn.close()
 ```
+
+## S3 Error Handling
+
+Storage errors are handled via custom exception classes in `storage.py`:
+
+- `StorageError` - Base exception with `is_retryable` flag
+- `S3ConnectionError` - S3 connection failure (retryable)
+- `S3UploadError` - Upload failure (retryable)
+- `S3DownloadError` - Download/URL generation failure (non-retryable)
+- `S3DeleteError` - Delete failure (non-retryable)
+
+All S3 operations wrap boto3 exceptions (`ClientError`, `BotoCoreError`, `EndpointConnectionError`) and provide user-friendly error messages.
