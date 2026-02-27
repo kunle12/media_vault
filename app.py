@@ -229,7 +229,7 @@ def view_media(media_id):
         flash("Media not found or you do not have permission to view it", "error")
         return redirect(url_for("dashboard"))
 
-    return render_template("video.html", video=media)
+    return render_template("media_view.html", media=media)
 
 
 def encode_filename_for_header(filename: str) -> str:
