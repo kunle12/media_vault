@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+import sys
 import uuid
 from functools import wraps
 
@@ -16,10 +17,29 @@ from flask import (
     url_for,
 )
 from flask_caching import Cache
+from loguru import logger
 
 from auth import auth_bp, is_google_oauth_enabled
 from config import Config
 from storage import S3UploadError, StorageError, get_storage_backend, is_s3_enabled
+
+logger.remove()
+
+logger.add(
+    sys.stderr,
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+)
+
+logger.add(
+    "logs/app.log",
+    rotation="1 day",
+    retention="7 days",
+    level="INFO",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+)
+
+logger.info("MediaVault application starting")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = Config.SECRET_KEY()
@@ -44,6 +64,7 @@ app.register_blueprint(auth_bp)
 
 # Initialize storage backend
 storage = get_storage_backend()
+logger.info(f"Storage backend initialized: {type(storage).__name__}")
 
 
 # Database setup
@@ -196,13 +217,19 @@ def upload():
                     conn.close()
 
                     uploaded_count += 1
+                    logger.info(
+                        f"File uploaded: {original_filename} ({file_size} bytes)"
+                    )
                 except S3UploadError as e:
+                    logger.error(f"S3 upload error: {e}")
                     s3_error = str(e)
                     break
                 except StorageError as e:
+                    logger.error(f"Storage error during upload: {e}")
                     s3_error = str(e)
                     break
                 except Exception as e:
+                    logger.exception(f"Unexpected error during upload: {e}")
                     s3_error = f"Unexpected error: {str(e)}"
                     break
             else:
@@ -397,7 +424,9 @@ def delete_media(media_id):
 
     try:
         storage.delete(media["storage_key"])
+        logger.info(f"File deleted: {media['original_filename']}")
     except StorageError as e:
+        logger.error(f"Storage error during delete: {e}")
         flash(f"Failed to delete file: {e}", "error")
         return redirect(url_for("dashboard"))
 

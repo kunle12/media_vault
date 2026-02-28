@@ -172,6 +172,38 @@ class Config:
 
     @staticmethod
     @lru_cache(maxsize=None)
+    def AZURE_STORAGE_ACCOUNT() -> str:
+        """Get Azure storage account name."""
+        return Config.get("AZURE_STORAGE_ACCOUNT")
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def AZURE_STORAGE_KEY() -> str:
+        """Get Azure storage account key."""
+        return Config.get("AZURE_STORAGE_KEY")
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def AZURE_CONTAINER() -> str:
+        """Get Azure blob container name."""
+        return Config.get("AZURE_CONTAINER")
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def AZURE_CONNECTION_STRING() -> str:
+        """Get Azure connection string."""
+        return Config.get("AZURE_CONNECTION_STRING")
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def AZURE_ENABLED() -> bool:
+        """Check if Azure storage is enabled."""
+        return bool(
+            Config.AZURE_STORAGE_ACCOUNT() and Config.AZURE_STORAGE_KEY()
+        ) or bool(Config.AZURE_CONNECTION_STRING())
+
+    @staticmethod
+    @lru_cache(maxsize=None)
     def ALLOWED_EMAILS() -> str:
         """Get allowed emails."""
         return Config.get("ALLOWED_EMAILS")
@@ -189,6 +221,11 @@ def is_google_oauth_enabled() -> bool:
 def is_s3_enabled() -> bool:
     """Check if S3 storage is configured."""
     return Config.S3_ENABLED()
+
+
+def is_azure_enabled() -> bool:
+    """Check if Azure storage is configured."""
+    return Config.AZURE_ENABLED()
 
 
 def get_google_client_id() -> str:

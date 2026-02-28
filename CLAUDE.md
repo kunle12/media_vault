@@ -86,6 +86,10 @@ The app runs on `http://localhost:5050`
 | S3_PREFIX | - | S3 key prefix |
 | AWS_REGION | - | AWS region for S3 |
 | AWS_DEFAULT_REGION | - | AWS default region |
+| AZURE_STORAGE_ACCOUNT | - | Azure storage account name (enables Azure storage) |
+| AZURE_STORAGE_KEY | - | Azure storage account key |
+| AZURE_CONTAINER | media | Azure blob container name |
+| AZURE_CONNECTION_STRING | - | Azure connection string (alternative to account/key) |
 | EMAIL_PROVIDER | generic | generic or aws_ses |
 | SMTP_HOST | - | SMTP server |
 | SMTP_PORT | 587 | SMTP port |
@@ -154,3 +158,14 @@ Storage errors are handled via custom exception classes in `storage.py`:
 - `S3DeleteError` - Delete failure (non-retryable)
 
 All S3 operations wrap boto3 exceptions (`ClientError`, `BotoCoreError`, `EndpointConnectionError`) and provide user-friendly error messages.
+
+## Azure Error Handling
+
+Azure storage operations use custom exception classes in `storage.py`:
+
+- `AzureConnectionError` - Azure connection failure (retryable)
+- `AzureUploadError` - Upload failure (retryable)
+- `AzureDownloadError` - Download/URL generation failure (non-retryable)
+- `AzureDeleteError` - Delete failure (non-retryable)
+
+All Azure operations wrap `AzureError` exceptions and provide user-friendly error messages.

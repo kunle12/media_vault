@@ -1,14 +1,17 @@
-"""Storage backend for MediaVault - supports local filesystem and AWS S3."""
+"""Storage backend for MediaVault - supports local filesystem, AWS S3, and Azure Blob Storage."""
 
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 import boto3
+from azure.core.exceptions import AzureError
+from azure.storage.blob import BlobServiceClient
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
 
 from config import Config
+from config import is_azure_enabled as config_is_azure_enabled
 from config import is_s3_enabled as config_is_s3_enabled
 
 
@@ -46,6 +49,34 @@ class S3DeleteError(StorageError):
     """Exception raised when S3 delete fails."""
 
     def __init__(self, message: str = "Failed to delete file from S3"):
+        super().__init__(message, is_retryable=False)
+
+
+class AzureConnectionError(StorageError):
+    """Exception raised when Azure connection fails."""
+
+    def __init__(self, message: str = "Failed to connect to Azure storage"):
+        super().__init__(message, is_retryable=True)
+
+
+class AzureUploadError(StorageError):
+    """Exception raised when Azure upload fails."""
+
+    def __init__(self, message: str = "Failed to upload file to Azure"):
+        super().__init__(message, is_retryable=True)
+
+
+class AzureDownloadError(StorageError):
+    """Exception raised when Azure download fails."""
+
+    def __init__(self, message: str = "Failed to download file from Azure"):
+        super().__init__(message, is_retryable=False)
+
+
+class AzureDeleteError(StorageError):
+    """Exception raised when Azure delete fails."""
+
+    def __init__(self, message: str = "Failed to delete file from Azure"):
         super().__init__(message, is_retryable=False)
 
 
@@ -218,6 +249,192 @@ class S3Storage(StorageBackend):
         return True
 
 
+class AzureStorage(StorageBackend):
+    """Azure Blob Storage backend."""
+
+    def __init__(
+        self,
+        account_name: str,
+        account_key: Optional[str] = None,
+        container: str = "media",
+        connection_string: Optional[str] = None,
+    ):
+        self.container = container
+        self.account_name = account_name
+        self.account_key = account_key
+        self.is_azurite = False
+
+        if connection_string:
+            self.client = BlobServiceClient.from_connection_string(connection_string)
+            if (
+                "127.0.0.1:10000" in connection_string
+                or "localhost:10000" in connection_string
+            ):
+                self.is_azurite = True
+        else:
+            account_key = account_key or ""
+            connection_str = (
+                f"DefaultEndpointsProtocol=https;"
+                f"AccountName={account_name};"
+                f"AccountKey={account_key}"
+            )
+            self.client = BlobServiceClient.from_connection_string(connection_str)
+        self.blob_client = self.client.get_container_client(container)
+
+        self._base_url = None
+        if self.is_azurite:
+            if connection_string:
+                for part in connection_string.split(";"):
+                    if part.startswith("BlobEndpoint="):
+                        self._base_url = part.split("=", 1)[1]
+                        break
+
+    def _get_blob_name(self, filename: str) -> str:
+        """Generate blob name for filename with subdirectory."""
+        subdir = get_media_subdir(filename)
+        return f"{subdir}/{filename}"
+
+    def save(self, file_obj: Any, filename: str) -> str:
+        """Upload file to Azure and return the blob name."""
+        blob_name = self._get_blob_name(filename)
+        file_obj.seek(0)
+        file_content = file_obj.read()
+
+        if self.is_azurite:
+            import urllib.error
+            import urllib.request
+
+            url = f"{self._base_url}/{blob_name}"
+            request = urllib.request.Request(
+                url,
+                data=file_content,
+                headers={
+                    "x-ms-blob-type": "BlockBlob",
+                    "Content-Type": "application/octet-stream",
+                },
+                method="PUT",
+            )
+            try:
+                response = urllib.request.urlopen(request)
+                response.close()
+            except urllib.error.HTTPError as e:
+                raise AzureUploadError(
+                    f"Failed to upload to Azure: {e.read().decode() if e.fp else str(e)}"
+                )
+        else:
+            try:
+                blob = self.client.get_blob_client(
+                    container=self.container, blob=blob_name
+                )
+                from io import BytesIO
+
+                blob.upload_blob(BytesIO(file_content), overwrite=True)
+            except AzureError as e:
+                raise AzureUploadError(f"Failed to upload to Azure: {str(e)}")
+        return blob_name
+
+    def delete(self, key: str) -> bool:
+        """Delete blob from Azure."""
+        if self.is_azurite:
+            import urllib.error
+            import urllib.request
+
+            url = f"{self._base_url}/{key}"
+            request = urllib.request.Request(url, method="DELETE")
+            try:
+                response = urllib.request.urlopen(request)
+                response.close()
+                return True
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    return True
+                raise AzureDeleteError(
+                    f"Failed to delete from Azure: {e.read().decode() if e.fp else str(e)}"
+                )
+
+        try:
+            blob = self.client.get_blob_client(container=self.container, blob=key)
+            blob.delete_blob()
+            return True
+        except AzureError as e:
+            raise AzureDeleteError(f"Failed to delete from Azure: {str(e)}")
+
+    def get_file(self, key: str) -> bytes:
+        """Download file content from Azure."""
+        if self.is_azurite:
+            import urllib.error
+            import urllib.request
+
+            url = f"{self._base_url}/{key}"
+            try:
+                response = urllib.request.urlopen(url)
+                data = response.read()
+                response.close()
+                return data
+            except urllib.error.HTTPError as e:
+                raise AzureDownloadError(
+                    f"Failed to download from Azure: {e.read().decode() if e.fp else str(e)}"
+                )
+
+        try:
+            blob = self.client.get_blob_client(container=self.container, blob=key)
+            return blob.download_blob().readall()
+        except AzureError as e:
+            raise AzureDownloadError(f"Failed to download from Azure: {str(e)}")
+
+    def get_url(
+        self, key: str, filename: str, expires_in: int = 3600, inline: bool = False
+    ) -> str:
+        """Generate SAS URL for Azure blob."""
+        if self.is_azurite and self._base_url:
+            base_url = f"{self._base_url}/{key}"
+        else:
+            from azure.storage.blob import generate_blob_sas
+
+            try:
+                account_key = getattr(
+                    getattr(self.client, "credential", None), "account_key", None
+                )
+                if account_key:
+                    sas_token = generate_blob_sas(
+                        account_name=self.client.account_name,
+                        container_name=self.container,
+                        blob_name=key,
+                        account_key=account_key,
+                        expiry=__import__("datetime").datetime.utcnow()
+                        + __import__("datetime").timedelta(seconds=expires_in),
+                    )
+                    base_url = self.client.get_blob_client(
+                        container=self.container, blob=key
+                    ).url
+                    url = f"{base_url}?{sas_token}"
+                    return url
+                else:
+                    blob_client = self.client.get_blob_client(
+                        container=self.container, blob=key
+                    )
+                    base_url = blob_client.url
+            except AzureError as e:
+                raise AzureDownloadError(f"Failed to generate download URL: {str(e)}")
+
+        disposition = "inline" if inline else "attachment"
+        try:
+            try:
+                filename.encode("ascii")
+                filename_param = f'filename="{filename}"'
+            except UnicodeEncodeError:
+                import urllib.parse
+
+                encoded = urllib.parse.quote(filename)
+                filename_param = f"filename*=UTF-8''{encoded}"
+            return f"{base_url}?{disposition}; {filename_param}"
+        except Exception as e:
+            raise AzureDownloadError(f"Failed to generate download URL: {str(e)}")
+
+    def is_s3(self) -> bool:
+        return False
+
+
 def get_storage_backend() -> StorageBackend:
     """Factory function to get the appropriate storage backend."""
     s3_bucket = Config.S3_BUCKET()
@@ -227,6 +444,13 @@ def get_storage_backend() -> StorageBackend:
         endpoint_url = Config.S3_ENDPOINT()
         return S3Storage(s3_bucket, region, prefix, endpoint_url)
 
+    if is_azure_enabled():
+        azure_account = Config.AZURE_STORAGE_ACCOUNT()
+        account_key = Config.AZURE_STORAGE_KEY()
+        container = Config.AZURE_CONTAINER() or "media"
+        connection_string = Config.AZURE_CONNECTION_STRING()
+        return AzureStorage(azure_account, account_key, container, connection_string)
+
     upload_folder = Config.UPLOAD_FOLDER()
     return LocalStorage(upload_folder)
 
@@ -234,3 +458,8 @@ def get_storage_backend() -> StorageBackend:
 def is_s3_enabled() -> bool:
     """Check if S3 storage is configured."""
     return config_is_s3_enabled()
+
+
+def is_azure_enabled() -> bool:
+    """Check if Azure storage is configured."""
+    return config_is_azure_enabled()
