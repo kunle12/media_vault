@@ -1,12 +1,14 @@
 """Storage backend for MediaVault - supports local filesystem, AWS S3, and Azure Blob Storage."""
 
 import os
+import urllib.parse
 from abc import ABC, abstractmethod
+from io import BytesIO
 from typing import Any, Optional
 
 import boto3
 from azure.core.exceptions import AzureError
-from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient, generate_blob_sas
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
 
@@ -157,8 +159,8 @@ class LocalStorage(StorageBackend):
         try:
             with open(key, "rb") as f:
                 return f.read()
-        except FileNotFoundError:
-            raise StorageError(f"File not found: {key}", is_retryable=False)
+        except FileNotFoundError as e:
+            raise StorageError(f"File not found: {key}", is_retryable=False) from e
 
     def get_url(self, key: str, filename: str, expires_in: int = 3600) -> str:
         """Local files don't need presigned URLs."""
@@ -199,7 +201,7 @@ class S3Storage(StorageBackend):
         try:
             self.client.upload_fileobj(file_obj, self.bucket, key)
         except (ClientError, BotoCoreError, EndpointConnectionError) as e:
-            raise S3UploadError(f"Failed to upload to S3: {str(e)}")
+            raise S3UploadError(f"Failed to upload to S3: {str(e)}") from e
         return key
 
     def delete(self, key: str) -> bool:
@@ -208,7 +210,7 @@ class S3Storage(StorageBackend):
             self.client.delete_object(Bucket=self.bucket, Key=key)
             return True
         except (ClientError, BotoCoreError, EndpointConnectionError) as e:
-            raise S3DeleteError(f"Failed to delete from S3: {str(e)}")
+            raise S3DeleteError(f"Failed to delete from S3: {str(e)}") from e
 
     def get_file(self, key: str) -> bytes:
         """Download file content from S3."""
@@ -216,7 +218,7 @@ class S3Storage(StorageBackend):
             response = self.client.get_object(Bucket=self.bucket, Key=key)
             return response["Body"].read()
         except (ClientError, BotoCoreError, EndpointConnectionError) as e:
-            raise S3DownloadError(f"Failed to download from S3: {str(e)}")
+            raise S3DownloadError(f"Failed to download from S3: {str(e)}") from e
 
     def get_url(
         self, key: str, filename: str, expires_in: int = 3600, inline: bool = False
@@ -228,8 +230,6 @@ class S3Storage(StorageBackend):
                 filename.encode("ascii")
                 filename_param = f'filename="{filename}"'
             except UnicodeEncodeError:
-                import urllib.parse
-
                 encoded = urllib.parse.quote(filename)
                 filename_param = f"filename*=UTF-8''{encoded}"
 
@@ -243,7 +243,7 @@ class S3Storage(StorageBackend):
                 ExpiresIn=expires_in,
             )
         except (ClientError, BotoCoreError, EndpointConnectionError) as e:
-            raise S3DownloadError(f"Failed to generate download URL: {str(e)}")
+            raise S3DownloadError(f"Failed to generate download URL: {str(e)}") from e
 
     def is_s3(self) -> bool:
         return True
@@ -262,15 +262,9 @@ class AzureStorage(StorageBackend):
         self.container = container
         self.account_name = account_name
         self.account_key = account_key
-        self.is_azurite = False
 
         if connection_string:
             self.client = BlobServiceClient.from_connection_string(connection_string)
-            if (
-                "127.0.0.1:10000" in connection_string
-                or "localhost:10000" in connection_string
-            ):
-                self.is_azurite = True
         else:
             account_key = account_key or ""
             connection_str = (
@@ -279,15 +273,8 @@ class AzureStorage(StorageBackend):
                 f"AccountKey={account_key}"
             )
             self.client = BlobServiceClient.from_connection_string(connection_str)
-        self.blob_client = self.client.get_container_client(container)
 
         self._base_url = None
-        if self.is_azurite:
-            if connection_string:
-                for part in connection_string.split(";"):
-                    if part.startswith("BlobEndpoint="):
-                        self._base_url = part.split("=", 1)[1]
-                        break
 
     def _get_blob_name(self, filename: str) -> str:
         """Generate blob name for filename with subdirectory."""
@@ -300,122 +287,61 @@ class AzureStorage(StorageBackend):
         file_obj.seek(0)
         file_content = file_obj.read()
 
-        if self.is_azurite:
-            import urllib.error
-            import urllib.request
+        try:
+            blob = self.client.get_blob_client(container=self.container, blob=blob_name)
 
-            url = f"{self._base_url}/{blob_name}"
-            request = urllib.request.Request(
-                url,
-                data=file_content,
-                headers={
-                    "x-ms-blob-type": "BlockBlob",
-                    "Content-Type": "application/octet-stream",
-                },
-                method="PUT",
-            )
-            try:
-                response = urllib.request.urlopen(request)
-                response.close()
-            except urllib.error.HTTPError as e:
-                raise AzureUploadError(
-                    f"Failed to upload to Azure: {e.read().decode() if e.fp else str(e)}"
-                )
-        else:
-            try:
-                blob = self.client.get_blob_client(
-                    container=self.container, blob=blob_name
-                )
-                from io import BytesIO
-
-                blob.upload_blob(BytesIO(file_content), overwrite=True)
-            except AzureError as e:
-                raise AzureUploadError(f"Failed to upload to Azure: {str(e)}")
+            blob.upload_blob(BytesIO(file_content), overwrite=True)
+        except AzureError as e:
+            raise AzureUploadError(f"Failed to upload to Azure: {str(e)}") from e
         return blob_name
 
     def delete(self, key: str) -> bool:
         """Delete blob from Azure."""
-        if self.is_azurite:
-            import urllib.error
-            import urllib.request
-
-            url = f"{self._base_url}/{key}"
-            request = urllib.request.Request(url, method="DELETE")
-            try:
-                response = urllib.request.urlopen(request)
-                response.close()
-                return True
-            except urllib.error.HTTPError as e:
-                if e.code == 404:
-                    return True
-                raise AzureDeleteError(
-                    f"Failed to delete from Azure: {e.read().decode() if e.fp else str(e)}"
-                )
-
         try:
             blob = self.client.get_blob_client(container=self.container, blob=key)
             blob.delete_blob()
             return True
         except AzureError as e:
-            raise AzureDeleteError(f"Failed to delete from Azure: {str(e)}")
+            raise AzureDeleteError(f"Failed to delete from Azure: {str(e)}") from e
 
     def get_file(self, key: str) -> bytes:
         """Download file content from Azure."""
-        if self.is_azurite:
-            import urllib.error
-            import urllib.request
-
-            url = f"{self._base_url}/{key}"
-            try:
-                response = urllib.request.urlopen(url)
-                data = response.read()
-                response.close()
-                return data
-            except urllib.error.HTTPError as e:
-                raise AzureDownloadError(
-                    f"Failed to download from Azure: {e.read().decode() if e.fp else str(e)}"
-                )
-
         try:
             blob = self.client.get_blob_client(container=self.container, blob=key)
             return blob.download_blob().readall()
         except AzureError as e:
-            raise AzureDownloadError(f"Failed to download from Azure: {str(e)}")
+            raise AzureDownloadError(f"Failed to download from Azure: {str(e)}") from e
 
     def get_url(
         self, key: str, filename: str, expires_in: int = 3600, inline: bool = False
     ) -> str:
         """Generate SAS URL for Azure blob."""
-        if self.is_azurite and self._base_url:
-            base_url = f"{self._base_url}/{key}"
-        else:
-            from azure.storage.blob import generate_blob_sas
-
-            try:
-                account_key = getattr(
-                    getattr(self.client, "credential", None), "account_key", None
+        try:
+            account_key = getattr(
+                getattr(self.client, "credential", None), "account_key", None
+            )
+            if account_key:
+                sas_token = generate_blob_sas(
+                    account_name=self.client.account_name,
+                    container_name=self.container,
+                    blob_name=key,
+                    account_key=account_key,
+                    expiry=__import__("datetime").datetime.utcnow()
+                    + __import__("datetime").timedelta(seconds=expires_in),
                 )
-                if account_key:
-                    sas_token = generate_blob_sas(
-                        account_name=self.client.account_name,
-                        container_name=self.container,
-                        blob_name=key,
-                        account_key=account_key,
-                        expiry=__import__("datetime").datetime.utcnow()
-                        + __import__("datetime").timedelta(seconds=expires_in),
-                    )
-                    base_url = self.client.get_blob_client(
-                        container=self.container, blob=key
-                    ).url
-                    url = f"{base_url}?{sas_token}"
-                    return url
-                else:
-                    blob_client = self.client.get_blob_client(
-                        container=self.container, blob=key
-                    )
-                    base_url = blob_client.url
-            except AzureError as e:
-                raise AzureDownloadError(f"Failed to generate download URL: {str(e)}")
+                base_url = self.client.get_blob_client(
+                    container=self.container, blob=key
+                ).url
+                url = f"{base_url}?{sas_token}"
+                return url
+            blob_client = self.client.get_blob_client(
+                container=self.container, blob=key
+            )
+            base_url = blob_client.url
+        except AzureError as e:
+            raise AzureDownloadError(
+                f"Failed to generate download URL: {str(e)}"
+            ) from e
 
         disposition = "inline" if inline else "attachment"
         try:
@@ -423,13 +349,13 @@ class AzureStorage(StorageBackend):
                 filename.encode("ascii")
                 filename_param = f'filename="{filename}"'
             except UnicodeEncodeError:
-                import urllib.parse
-
                 encoded = urllib.parse.quote(filename)
                 filename_param = f"filename*=UTF-8''{encoded}"
             return f"{base_url}?{disposition}; {filename_param}"
         except Exception as e:
-            raise AzureDownloadError(f"Failed to generate download URL: {str(e)}")
+            raise AzureDownloadError(
+                f"Failed to generate download URL: {str(e)}"
+            ) from e
 
     def is_s3(self) -> bool:
         return False
