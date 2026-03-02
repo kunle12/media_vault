@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  mediavault:
+    build: .
+    ports:
+      - "5050:5050"
+    volumes:
+      - uploads:/app/uploads
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS:-}
+      - DATABASE=/app/videodb.sqlite
+      - UPLOAD_FOLDER=/app/uploads
+      - CACHE_TYPE=simple
+      # S3 Storage (uncomment to enable):
+      # - S3_BUCKET=${S3_BUCKET}
+      # - S3_PREFIX=${S3_PREFIX:-}
+      # - AWS_REGION=${AWS_REGION:-us-east-1}
+      - EMAIL_PROVIDER=generic
+      # Uncomment and configure for production email:
+      # - SMTP_HOST=${SMTP_HOST}
+      # - SMTP_PORT=${SMTP_PORT:-587}
+      # - SMTP_USER=${SMTP_USER}
+      # - SMTP_PASSWORD=${SMTP_PASSWORD}
+      # - FROM_EMAIL=${FROM_EMAIL}
+    restart: unless-stopped
+
+volumes:
+  uploads:

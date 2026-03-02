@@ -1,15 +1,16 @@
-# VideoVault
+# MediaVault
 
-A Flask-based personal video management application that allows users to upload, view, and manage their video collection.
+A Flask-based personal multimedia management application that allows users to upload, view, and manage their video and audio collection.
 
 ## Features
 
-- **User Authentication**: Register and login with email/password or Google OAuth
-- **Video Upload**: Upload video files (mp4, avi, mov, mkv, wmv, flv, webm) up to 500MB
-- **Audio Upload**: Upload audio files (mp3, wav, ogg) up to 500MB
-- **Video Management**: View, download, and delete your uploaded videos
-- **Dashboard**: Personal dashboard showing all your uploaded videos
-- **Security**: Password hashing with bcrypt, session-based authentication, CSRF protection
+- **Passwordless Authentication**: Email-based verification code login
+- **Media Upload**: Upload media files (media: mp4, avi, mov, mkv, wmv, flv, webm and audio: mp3, wav, ogg) up to 500MB
+- **Media Management**: View, stream, download, and delete your uploaded files
+- **Dashboard**: Personal dashboard showing all your uploaded media
+- **Non-ASCII Filename Support**: Full support for filenames with non-ASCII characters (Chinese, Japanese, Russian, etc.)
+- **S3 Storage**: Optional AWS S3 (or compatible) storage backend
+- **Security**: Time-sensitive verification codes (5 min), rate limiting, session-based auth
 
 ## Requirements
 
@@ -20,7 +21,7 @@ A Flask-based personal video management application that allows users to upload,
 
 1. Clone the repository and navigate to the project directory:
    ```bash
-   cd VideoVault
+   cd MediaVault
    ```
 
 2. Create a virtual environment (optional but recommended):
@@ -34,16 +35,37 @@ A Flask-based personal video management application that allows users to upload,
    pip install -r requirements.txt
    ```
 
-4. (Optional) Create an `.env` file to override defaults:
+4. Configure allowed emails by setting the `ALLOWED_EMAILS` environment variable (whitespace-separated emails):
+   ```
+   export ALLOWED_EMAILS="user@example.com admin@example.com your-email@domain.com"
+   ```
+
+5. (Optional) Create an `.env` file to override defaults:
    ```env
    SECRET_KEY=your_secret_key_here
    UPLOAD_FOLDER=uploads
    DATABASE=videodb.sqlite
-   GOOGLE_CLIENT_ID=your_google_client_id
-   GOOGLE_CLIENT_SECRET=your_google_client_secret
    ```
 
-5. Run the application - database and upload folder are created automatically:
+6. (Optional) Configure email sending:
+   ```env
+   # Email provider: generic, aws_ses
+   EMAIL_PROVIDER=aws_ses
+   
+   # AWS SES (if using AWS SES)
+   AWS_REGION=us-east-1
+   SMTP_USER=AKIxxxxxxxxxxxx
+   SMTP_PASSWORD=BPxxxxxxxxxxxxxxxxxxxxx
+   FROM_EMAIL=noreply@yourdomain.com
+   
+   # Or Gmail/Other SMTP
+   # SMTP_HOST=smtp.gmail.com
+   # SMTP_PORT=587
+   # SMTP_USER=your@gmail.com
+   # SMTP_PASSWORD=your_app_password
+   ```
+
+7. Run the application - database and upload folder are created automatically:
    ```bash
    python app.py
    ```
@@ -56,23 +78,51 @@ python app.py
 
 The application will start on `http://localhost:5050`. The database and uploads folder are created automatically on first run.
 
+## Authentication
+
+MediaVault uses **passwordless email authentication**:
+
+1. Enter your email on the sign-in modal
+2. If your email is in the allowed list, a 6-character verification code is sent
+3. Enter the code (valid for 5 minutes, 5 retry attempts max)
+4. Session is created and you can access the dashboard
+
+### Allowed Emails
+
+Set the `ALLOWED_EMAILS` environment variable with whitespace-separated email addresses to control who can access the application.
+
+### Email Configuration
+
+The app supports multiple email providers:
+
+| Provider | Setup |
+|----------|-------|
+| **Debug (default)** | No config needed - codes printed to console |
+| **AWS SES** | Set `EMAIL_PROVIDER=aws_ses`, `AWS_REGION`, SMTP credentials |
+| **Gmail** | Set `SMTP_HOST=smtp.gmail.com`, use App Password |
+| **Other SMTP** | Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` |
+
 ## Project Structure
 
 ```
-VideoVault/
-├── app.py              # Main application file
-├── requirements.txt    # Python dependencies
-├── README.md           # Documentation
-├── videodb.sqlite     # SQLite database (auto-created)
-├── templates/         # HTML templates
-│   ├── layout.html    # Base template
-│   ├── index.html     # Home page
-│   ├── register.html  # Registration page
-│   ├── login.html     # Login page
-│   ├── dashboard.html # User dashboard
-│   ├── upload.html    # Video upload page
-│   └── video.html     # Video view page
-└── uploads/           # Video storage directory (auto-created)
+MediaVault/
+├── app.py                   # Main application file
+├── auth.py                  # Authentication blueprint
+├── storage.py               # Storage backend (local/S3)
+├── requirements.txt         # Python dependencies
+├── README.md                # Documentation
+├── Dockerfile               # Docker configuration
+├── docker-compose.yml       # Docker Compose configuration
+├── videodb.sqlite          # SQLite database (auto-created)
+├── templates/              # HTML templates
+│   ├── layout.html         # Base template
+│   ├── index.html          # Home page
+│   ├── dashboard.html      # User dashboard
+│   ├── upload.html         # Media upload page
+│   ├── media_view.html     # Media view page
+│   ├── auth_modals.html    # Authentication modals
+│   └── auth_trigger.html   # Auth trigger page
+└── uploads/                # Media storage directory (auto-created)
 ```
 
 ## Routes
@@ -80,16 +130,16 @@ VideoVault/
 | Route | Method | Description |
 |-------|--------|-------------|
 | `/` | GET | Home page |
-| `/register` | GET, POST | User registration |
-| `/login` | GET, POST | User login |
-| `/login/google` | GET | Google OAuth login |
-| `/login/google/callback` | GET | Google OAuth callback |
-| `/logout` | GET | User logout |
+| `/auth/request-code` | POST | Request verification code |
+| `/auth/verify-code` | POST | Verify code and login |
+| `/auth/logout` | POST | User logout |
+| `/auth/status` | GET | Check auth status |
 | `/dashboard` | GET | User dashboard (protected) |
-| `/upload` | GET, POST | Video upload (protected) |
-| `/video/<id>` | GET | View video (protected) |
-| `/video/<id>/download` | GET | Download video (protected) |
-| `/video/<id>/delete` | POST | Delete video (protected) |
+| `/upload` | GET, POST | Media upload (protected) |
+| `/media/<id>` | GET | View media (protected) |
+| `/media/<id>/play` | GET | Stream media for playback (protected) |
+| `/media/<id>/download` | GET | Download media (protected) |
+| `/media/<id>/delete` | POST | Delete media (protected) |
 
 ## Database Schema
 
@@ -97,41 +147,65 @@ VideoVault/
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER | Primary key |
-| username | TEXT | Unique username |
 | email | TEXT | Unique email |
-| password_hash | TEXT | Hashed password |
-| google_id | TEXT | Google OAuth ID |
-| created_at | TIMESTAMP | Registration timestamp |
+| created_at | TIMESTAMP | First login timestamp |
 
-### videos
+### media
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER | Primary key |
 | filename | TEXT | Unique stored filename |
 | original_filename | TEXT | Original file name |
-| file_path | TEXT | Path to stored file |
+| storage_key | TEXT | Storage key (local path or S3 key) |
 | file_size | INTEGER | File size in bytes |
 | uploaded_at | TIMESTAMP | Upload timestamp |
 | user_id | INTEGER | Foreign key to users |
 
 ### Database Indexes
-- `idx_videos_user_id` on `videos(user_id)`
+- `idx_media_user_id` on `media(user_id)`
 - `idx_users_email` on `users(email)`
-- `idx_users_google_id` on `users(google_id)`
 
 ## Configuration
 
-The following configuration options can be set via environment variables or in app.py:
+The following configuration options can be set via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | SECRET_KEY | random 32-byte hex | Flask secret key (auto-generated) |
 | WTF_CSRF_ENABLED | True | Enable CSRF protection |
-| UPLOAD_FOLDER | uploads | Directory for storing videos |
+| UPLOAD_FOLDER | uploads | Directory for storing media |
 | MAX_CONTENT_LENGTH | 524288000 (500MB) | Maximum upload size |
 | DATABASE | videodb.sqlite | SQLite database file |
-| GOOGLE_CLIENT_ID | - | Google OAuth client ID |
-| GOOGLE_CLIENT_SECRET | - | Google OAuth client secret |
+| CACHE_TYPE | simple | Cache type (simple, redis) |
+| EMAIL_PROVIDER | generic | Email provider (generic, aws_ses) |
+
+### Email/SMTP Configuration
+
+| Variable | Description |
+|----------|-------------|
+| EMAIL_PROVIDER | Provider type: generic, aws_ses |
+| AWS_REGION | AWS region for SES (e.g., us-east-1) |
+| SMTP_HOST | SMTP server hostname |
+| SMTP_PORT | SMTP server port (default: 587) |
+| SMTP_USER | SMTP username |
+| SMTP_PASSWORD | SMTP password |
+| FROM_EMAIL | Sender email address |
+
+### S3 Storage Configuration
+
+| Variable | Description |
+|----------|-------------|
+| S3_BUCKET | S3 bucket name (enables S3 storage) |
+| S3_PREFIX | S3 key prefix |
+| AWS_REGION | AWS region |
+| AWS_DEFAULT_REGION | AWS default region |
+| S3_ENDPOINT | Custom S3 endpoint (for MinIO, etc.) |
+
+### Non-ASCII Filename Support
+
+MediaVault properly handles filenames with non-ASCII characters (e.g., Chinese, Japanese, Russian). 
+Filenames are encoded using RFC 5987 (`filename*=UTF-8''...`) in Content-Disposition headers 
+to ensure browser compatibility for both streaming and download.
 
 ## Allowed File Formats
 
