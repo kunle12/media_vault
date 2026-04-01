@@ -178,6 +178,8 @@ The following configuration options can be set via environment variables:
 | DATABASE | videodb.sqlite | SQLite database file |
 | CACHE_TYPE | simple | Cache type (simple, redis) |
 | EMAIL_PROVIDER | generic | Email provider (generic, aws_ses) |
+| APPLICATION_ROOT | / | URL path prefix for subpath hosting |
+| SERVER_NAME | (empty) | Server name for external URL generation |
 
 ### Email/SMTP Configuration
 

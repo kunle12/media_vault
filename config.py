@@ -55,6 +55,18 @@ class Config:
 
     @staticmethod
     @lru_cache(maxsize=None)
+    def APPLICATION_ROOT() -> str:
+        """Get application root path for subpath hosting."""
+        return Config.get("APPLICATION_ROOT", "/")
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def SERVER_NAME() -> str:
+        """Get server name for external URL generation."""
+        return Config.get("SERVER_NAME", "")
+
+    @staticmethod
+    @lru_cache(maxsize=None)
     def CACHE_TYPE() -> str:
         """Get cache type."""
         return Config.get("CACHE_TYPE", "simple")
@@ -259,3 +271,13 @@ def get_allowed_emails() -> set:
     """Get allowed emails as a set."""
     emails = Config.ALLOWED_EMAILS()
     return set(emails.lower().split()) if emails else set()
+
+
+def get_application_root() -> str:
+    """Get application root path for subpath hosting."""
+    return Config.APPLICATION_ROOT()
+
+
+def get_server_name() -> str:
+    """Get server name for external URL generation."""
+    return Config.SERVER_NAME()

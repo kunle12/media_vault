@@ -49,6 +49,10 @@ app.config["UPLOAD_FOLDER"] = Config.UPLOAD_FOLDER()
 app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH
 app.config["ALLOWED_EXTENSIONS"] = Config.ALLOWED_EXTENSIONS
 app.config["DATABASE"] = Config.DATABASE()
+app.config["APPLICATION_ROOT"] = Config.APPLICATION_ROOT()
+server_name = Config.SERVER_NAME()
+if server_name:
+    app.config["SERVER_NAME"] = server_name
 
 cache_type = Config.CACHE_TYPE()
 if cache_type == "redis":
