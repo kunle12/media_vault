@@ -67,6 +67,18 @@ app.config["GOOGLE_OAUTH_ENABLED"] = is_google_oauth_enabled()
 application_root = Config.APPLICATION_ROOT()
 app.jinja_env.globals["application_root"] = application_root
 
+_original_route = app.route
+
+
+def prefix_route(route, *args, **kwargs):
+    """Add application_root prefix to routes."""
+    if application_root != "/" and not route.startswith(application_root):
+        route = application_root.rstrip("/") + "/" + route.lstrip("/")
+    return _original_route(route, *args, **kwargs)
+
+
+app.route = prefix_route
+
 app.register_blueprint(
     auth_bp, url_prefix=application_root if application_root != "/" else None
 )
