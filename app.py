@@ -64,7 +64,12 @@ cache = Cache(app)
 
 app.config["GOOGLE_OAUTH_ENABLED"] = is_google_oauth_enabled()
 
-app.register_blueprint(auth_bp)
+application_root = Config.APPLICATION_ROOT()
+app.jinja_env.globals["application_root"] = application_root
+
+app.register_blueprint(
+    auth_bp, url_prefix=application_root if application_root != "/" else None
+)
 
 # Initialize storage backend
 storage = get_storage_backend()

@@ -10,7 +10,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
             </button>
-            
+
             <div class="text-center mb-6">
                 <div id="googleIcon" class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4" style="display: none;">
                     <svg class="w-6 h-6" viewBox="0 0 24 24">
@@ -28,9 +28,9 @@
                 <h2 class="text-xl font-semibold text-gray-900">Sign In to MediaVault</h2>
                 <p id="authDescription" class="text-sm text-gray-500 mt-1">Enter your email to receive a verification code</p>
             </div>
-            
+
             <div id="googleBtnContainer" style="display: none;" class="mb-4">
-                <a href="/auth/google/login" id="googleLoginBtn" class="flex items-center justify-center w-full bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-4 rounded-lg border border-gray-300 hover:border-gray-400 transition">
+                <a href="{{ application_root }}/auth/google/login" id="googleLoginBtn" class="flex items-center justify-center w-full bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-4 rounded-lg border border-gray-300 hover:border-gray-400 transition">
                     <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -48,32 +48,32 @@
                     </div>
                 </div>
             </div>
-            
+
             <form id="emailForm" onsubmit="submitEmail(event)">
                 <div class="mb-4">
-                    <input 
-                        type="email" 
-                        id="emailInput" 
-                        placeholder="you@example.com" 
+                    <input
+                        type="email"
+                        id="emailInput"
+                        placeholder="you@example.com"
                         required
                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                         autocomplete="email"
                     >
                 </div>
-                
+
                 <div id="emailError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                     <p class="text-sm text-red-600" id="emailErrorText"></p>
                 </div>
-                
-                <button 
-                    type="submit" 
+
+                <button
+                    type="submit"
                     id="emailSubmitBtn"
                     class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Continue
                 </button>
             </form>
-            
+
             <p id="emailFooter" class="text-xs text-gray-400 text-center mt-4">
                 We'll send a verification code to your email
             </p>
@@ -91,7 +91,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
             </button>
-            
+
             <div class="text-center mb-6">
                 <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +101,7 @@
                 <h2 class="text-xl font-semibold text-gray-900">Enter Verification Code</h2>
                 <p class="text-sm text-gray-500 mt-1">We sent a code to <span id="codeEmailDisplay" class="font-medium"></span></p>
             </div>
-            
+
             <div class="mb-4">
                 <div class="flex justify-center gap-2" id="codeInputs">
                     <input type="text" maxlength="1" class="code-input w-12 h-12 text-center text-xl font-bold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" data-index="0">
@@ -112,24 +112,24 @@
                     <input type="text" maxlength="1" class="code-input w-12 h-12 text-center text-xl font-bold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" data-index="5">
                 </div>
             </div>
-            
+
             <div id="codeError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <p class="text-sm text-red-600" id="codeErrorText"></p>
             </div>
-            
+
             <div id="codeSuccess" class="hidden mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                 <p class="text-sm text-green-600">Code verified! Redirecting...</p>
             </div>
-            
-            <button 
-                type="button" 
+
+            <button
+                type="button"
                 id="codeSubmitBtn"
                 onclick="submitCode()"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 Verify
             </button>
-            
+
             <div class="flex justify-center gap-2 mt-4">
                 <button onclick="showEmailModal()" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
                     Change email
@@ -157,8 +157,8 @@
             <p class="text-sm text-gray-500 mb-6" id="failureMessage">
                 Too many failed attempts. Please start over.
             </p>
-            <button 
-                onclick="restartAuth()" 
+            <button
+                onclick="restartAuth()"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition"
             >
                 Start Over
@@ -226,20 +226,20 @@ async function submitEmail(e) {
     e.preventDefault();
     const email = document.getElementById('emailInput').value.trim().toLowerCase();
     const btn = document.getElementById('emailSubmitBtn');
-    
+
     btn.disabled = true;
     btn.textContent = 'Sending...';
     hideEmailError();
-    
+
     try {
-        const response = await fetch('/auth/request-code', {
+        const response = await fetch('{{ application_root }}/auth/request-code', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showCodeModal(email);
         } else {
@@ -248,7 +248,7 @@ async function submitEmail(e) {
     } catch (err) {
         showEmailError('An error occurred. Please try again.');
     }
-    
+
     btn.disabled = false;
     btn.textContent = 'Continue';
 }
@@ -264,25 +264,25 @@ async function submitCode() {
     const code = Array.from(document.querySelectorAll('.code-input'))
         .map(input => input.value)
         .join('');
-    
+
     if (code.length !== 6) {
         showCodeError('Please enter all 6 characters');
         return;
     }
-    
+
     const btn = document.getElementById('codeSubmitBtn');
     btn.disabled = true;
     btn.textContent = 'Verifying...';
-    
+
     try {
-        const response = await fetch('/auth/verify-code', {
+        const response = await fetch('{{ application_root }}/auth/verify-code', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: currentEmail, code })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             document.getElementById('codeSuccess').classList.remove('hidden');
             document.querySelectorAll('.code-input').forEach(input => {
@@ -301,7 +301,7 @@ async function submitCode() {
     } catch (err) {
         showCodeError('An error occurred. Please try again.');
     }
-    
+
     btn.disabled = false;
     btn.textContent = 'Verify';
 }
@@ -318,10 +318,10 @@ function enableResendTimer() {
     const resendBtn = document.getElementById('resendBtn');
     resendBtn.disabled = true;
     resendBtn.textContent = 'Resend code (30s)';
-    
+
     let countdown = 30;
     if (resendTimeout) clearInterval(resendTimeout);
-    
+
     resendTimeout = setInterval(() => {
         countdown--;
         if (countdown <= 0) {
@@ -337,16 +337,16 @@ function enableResendTimer() {
 async function resendCode() {
     const btn = document.getElementById('resendBtn');
     btn.disabled = true;
-    
+
     try {
-        const response = await fetch('/auth/request-code', {
+        const response = await fetch('{{ application_root }}/auth/request-code', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: currentEmail })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             enableResendTimer();
             clearCodeInputs();
@@ -362,24 +362,24 @@ async function resendCode() {
 // Code input handling
 document.addEventListener('DOMContentLoaded', function() {
     const codeInputs = document.querySelectorAll('.code-input');
-    
+
     codeInputs.forEach((input, index) => {
         input.addEventListener('input', function(e) {
             this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
             this.classList.remove('border-red-500', 'border-green-500');
             document.getElementById('codeError').classList.add('hidden');
-            
+
             if (this.value && index < codeInputs.length - 1) {
                 codeInputs[index + 1].focus();
             }
         });
-        
+
         input.addEventListener('keydown', function(e) {
             if (e.key === 'Backspace' && !this.value && index > 0) {
                 codeInputs[index - 1].focus();
             }
         });
-        
+
         input.addEventListener('paste', function(e) {
             e.preventDefault();
             const paste = (e.clipboardData.getData('text') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -397,7 +397,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Check auth status on page load
 async function checkAuth() {
     try {
-        const response = await fetch('/auth/status');
+        const response = await fetch('{{ application_root }}/auth/status');
         const data = await response.json();
         return data.authenticated;
     } catch {
@@ -408,9 +408,9 @@ async function checkAuth() {
 // Initialize Google OAuth UI
 async function initGoogleOAuth() {
     try {
-        const response = await fetch('/auth/status');
+        const response = await fetch('{{ application_root }}/auth/status');
         const data = await response.json();
-        
+
         if (data.google_oauth_enabled) {
             document.getElementById('googleIcon').style.display = 'flex';
             document.getElementById('emailIcon').style.display = 'none';

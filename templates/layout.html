@@ -48,7 +48,7 @@
                 </div>
             </div>
         </nav>
-        
+
         <!-- Flash messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -71,13 +71,13 @@
                 </div>
             {% endif %}
         {% endwith %}
-        
+
         <main class="flex-grow">
             <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {% block content %}{% endblock %}
             </div>
         </main>
-        
+
         <footer class="bg-white border-t border-gray-200">
             <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                 <p class="text-center text-gray-500 text-sm">© 2025 Galaxy Network. All rights reserved.</p>
@@ -88,8 +88,8 @@
     <script>
         async function logout() {
             try {
-                await fetch('/auth/logout', { method: 'POST' });
-                window.location.href = '/';
+                await fetch('{{ application_root }}/auth/logout', { method: 'POST' });
+                window.location.href = '{{ application_root }}/';
             } catch (err) {
                 console.error('Logout failed:', err);
             }
