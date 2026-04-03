@@ -321,6 +321,7 @@ def verify_code():
     user_id = ensure_user_exists(email)
     session["user_id"] = user_id
     session["email"] = email
+    session["has_logged_in"] = True
     session.permanent = True
 
     return jsonify({"success": True, "message": "Login successful"})
@@ -343,6 +344,37 @@ def status():
             "google_oauth_enabled": is_google_oauth_enabled(),
         }
     )
+
+
+@auth_bp.route("/auth/session-status", methods=["GET"])
+def session_status():
+    """Check session expiry status."""
+    if "user_id" in session:
+        session_timeout = Config.SESSION_TIMEOUT_MINUTES() * 60
+        return jsonify(
+            {
+                "authenticated": True,
+                "expired": False,
+                "timeout_seconds": session_timeout,
+            }
+        )
+
+    was_logged_in = session.get("has_logged_in", False)
+    return jsonify(
+        {
+            "authenticated": False,
+            "expired": was_logged_in,
+        }
+    )
+
+
+@auth_bp.route("/auth/refresh-session", methods=["POST"])
+def refresh_session():
+    """Refresh the session timeout."""
+    if "user_id" in session:
+        session.modified = True
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "Not authenticated"}), 401
 
 
 @auth_bp.route("/auth/google/login", methods=["GET"])
@@ -433,6 +465,7 @@ def google_callback():
     user_id = ensure_user_exists(email)
     session["user_id"] = user_id
     session["email"] = email
+    session["has_logged_in"] = True
     session.permanent = True
     session.pop("oauth_state", None)
 

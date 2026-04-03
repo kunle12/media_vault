@@ -19,6 +19,60 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
     {% include 'auth_modals.html' %}
+
+    <!-- Session Expiry Warning Modal -->
+    <div id="sessionWarningModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black/50"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
+                <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-gray-900 mb-2">Session Expiring Soon</h2>
+                <p class="text-sm text-gray-500 mb-6">Your session will expire in <span id="sessionCountdown" class="font-bold text-yellow-600">2</span> minutes due to inactivity.</p>
+                <button
+                    onclick="extendSession()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition mb-2"
+                >
+                    Stay Logged In
+                </button>
+                <button
+                    onclick="logout()"
+                    class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition"
+                >
+                    Logout Now
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Expired Modal -->
+    <div id="sessionExpiredModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black/50"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
+                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-gray-900 mb-2">Session Expired</h2>
+                <p class="text-sm text-gray-500 mb-6">Your session has expired due to inactivity. Please log in again.</p>
+                <button
+                    onclick="closeSessionExpiredModal()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition"
+                >
+                    Go to Login
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-col min-h-screen">
+<body class="bg-gray-50 min-h-screen">
+    {% include 'auth_modals.html' %}
     <div class="flex flex-col min-h-screen">
         <nav class="bg-white border-b border-gray-200">
             <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -86,6 +140,10 @@
     </div>
 
     <script>
+        let sessionCheckInterval = null;
+        let sessionTimeoutSeconds = 600;
+        let sessionWarningShown = false;
+
         async function logout() {
             try {
                 await fetch('{{ application_root }}/auth/logout', { method: 'POST' });
@@ -94,6 +152,86 @@
                 console.error('Logout failed:', err);
             }
         }
+
+        async function checkSessionStatus() {
+            try {
+                const response = await fetch('{{ application_root }}/auth/session-status');
+                const data = await response.json();
+
+                if (!data.authenticated && data.expired && !sessionWarningShown) {
+                    showSessionExpiredModal();
+                    return;
+                }
+
+                if (data.timeout_seconds) {
+                    sessionTimeoutSeconds = data.timeout_seconds;
+                }
+            } catch (err) {
+                console.error('Session check failed:', err);
+            }
+        }
+
+        function showSessionWarning() {
+            if (sessionWarningShown) return;
+            sessionWarningShown = true;
+            document.getElementById('sessionWarningModal').classList.remove('hidden');
+            let countdown = 120;
+            const countdownEl = document.getElementById('sessionCountdown');
+            const interval = setInterval(() => {
+                countdown -= 10;
+                if (countdownEl) countdownEl.textContent = Math.ceil(countdown / 60);
+                if (countdown <= 0) {
+                    clearInterval(interval);
+                    doLogout();
+                }
+            }, 10000);
+        }
+
+        function extendSession() {
+            fetch('{{ application_root }}/auth/refresh-session', { method: 'POST' })
+                .then(() => {
+                    document.getElementById('sessionWarningModal').classList.add('hidden');
+                    sessionWarningShown = false;
+                    startSessionMonitor();
+                })
+                .catch(err => console.error('Session refresh failed:', err));
+        }
+
+        function showSessionExpiredModal() {
+            document.getElementById('sessionExpiredModal').classList.remove('hidden');
+        }
+
+        function closeSessionExpiredModal() {
+            document.getElementById('sessionExpiredModal').classList.add('hidden');
+            window.location.href = '{{ application_root }}/';
+        }
+
+        function doLogout() {
+            document.getElementById('sessionWarningModal').classList.add('hidden');
+            logout();
+        }
+
+        function startSessionMonitor() {
+            if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+
+            let elapsedSeconds = 0;
+            sessionCheckInterval = setInterval(async () => {
+                elapsedSeconds += 30;
+
+                if (elapsedSeconds >= sessionTimeoutSeconds - 120 && !sessionWarningShown) {
+                    showSessionWarning();
+                }
+
+                if (elapsedSeconds >= sessionTimeoutSeconds) {
+                    clearInterval(sessionCheckInterval);
+                    showSessionExpiredModal();
+                }
+            }, 30000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkSessionStatus().then(() => startSessionMonitor());
+        });
     </script>
 </body>
 </html>

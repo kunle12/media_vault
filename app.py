@@ -4,6 +4,7 @@ import os
 import sqlite3
 import sys
 import uuid
+from datetime import timedelta
 from functools import wraps
 
 from flask import (
@@ -64,8 +65,14 @@ cache = Cache(app)
 
 app.config["GOOGLE_OAUTH_ENABLED"] = is_google_oauth_enabled()
 
+session_timeout_minutes = Config.SESSION_TIMEOUT_MINUTES()
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=session_timeout_minutes)
+logger.info(f"Session timeout set to {session_timeout_minutes} minutes")
+
 application_root = Config.APPLICATION_ROOT()
-app.jinja_env.globals["application_root"] = application_root
+app.jinja_env.globals["application_root"] = (
+    application_root if application_root != "/" else ""
+)
 
 _original_route = app.route
 

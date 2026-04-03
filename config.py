@@ -224,6 +224,12 @@ class Config:
     MAX_CODE_ATTEMPTS = 5
     RATE_LIMIT_SECONDS = 60
 
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def SESSION_TIMEOUT_MINUTES() -> int:
+        """Get session timeout in minutes (default 10)."""
+        return Config.get_int("SESSION_TIMEOUT_MINUTES", 10)
+
 
 def is_google_oauth_enabled() -> bool:
     """Check if Google OAuth is configured."""
