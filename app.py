@@ -415,8 +415,18 @@ def download_media(media_id):
             flash(f"Failed to generate download URL: {e}", "error")
             return redirect(url_for("dashboard"))
     else:
+        file_path = media["storage_key"]
+
         try:
-            file_content = storage.get_file(media["storage_key"])
+
+            def generate():
+                with open(file_path, "rb") as f:
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        yield chunk
+
         except FileNotFoundError:
             flash("File not found on disk", "error")
             return redirect(url_for("dashboard"))
@@ -424,7 +434,7 @@ def download_media(media_id):
             flash(f"Failed to read file: {e}", "error")
             return redirect(url_for("dashboard"))
         return Response(
-            file_content,
+            generate(),
             mimetype="application/octet-stream",
             headers={
                 "Content-Disposition": f"attachment; {filename_header}",

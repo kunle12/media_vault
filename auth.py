@@ -13,6 +13,7 @@ import requests
 from flask import (
     Blueprint,
     current_app,
+    flash,
     jsonify,
     redirect,
     request,
@@ -75,10 +76,29 @@ OAUTH_STATE_EXPIRY = 600  # 10 minutes
 
 def load_allowed_emails():
     """Load allowed emails from ALLOWED_EMAILS environment variable."""
+    try:
+        cache = get_cache()
+        cached = cache.get("allowed_emails")
+        if cached is not None:
+            return cached
+    except RuntimeError:
+        pass
+
     emails_env = Config.ALLOWED_EMAILS()
     if emails_env:
-        return {email.strip().lower() for email in emails_env.split() if email.strip()}
-    return set()
+        allowed = {
+            email.strip().lower() for email in emails_env.split() if email.strip()
+        }
+    else:
+        allowed = set()
+
+    try:
+        cache = get_cache()
+        cache.set("allowed_emails", allowed, timeout=300)
+    except RuntimeError:
+        pass
+
+    return allowed
 
 
 def generate_code():
@@ -406,6 +426,7 @@ def google_callback():
     error = request.args.get("error")
     if error:
         session.pop("oauth_state", None)
+        flash("Google authentication failed", "error")
         return redirect(url_for("trigger_auth"))
 
     code = request.args.get("code")
@@ -413,14 +434,17 @@ def google_callback():
 
     if not code or not state:
         session.pop("oauth_state", None)
+        flash("Authentication failed: missing parameters", "error")
         return redirect(url_for("trigger_auth"))
 
     if not is_oauth_state_valid():
         session.pop("oauth_state", None)
+        flash("Authentication session expired. Please try again.", "error")
         return redirect(url_for("trigger_auth"))
 
     if state != session.get("oauth_state", {}).get("state"):
         session.pop("oauth_state", None)
+        flash("Authentication failed: invalid state", "error")
         return redirect(url_for("trigger_auth"))
 
     from authlib.integrations.requests_client import OAuth2Session
@@ -441,25 +465,30 @@ def google_callback():
     access_token = token.get("access_token")
     if not access_token:
         session.pop("oauth_state", None)
+        flash("Failed to obtain access token", "error")
         return redirect(url_for("trigger_auth"))
 
     user_info = get_google_user_info(access_token)
     if not user_info:
         session.pop("oauth_state", None)
+        flash("Failed to retrieve user information", "error")
         return redirect(url_for("trigger_auth"))
 
     if not user_info.get("verified_email", False):
         session.pop("oauth_state", None)
+        flash("Please verify your Google email address", "error")
         return redirect(url_for("trigger_auth"))
 
     email = user_info.get("email", "").lower()
     if not email:
         session.pop("oauth_state", None)
+        flash("No email found in Google account", "error")
         return redirect(url_for("trigger_auth"))
 
     allowed_emails = load_allowed_emails()
     if allowed_emails and email not in allowed_emails:
         session.pop("oauth_state", None)
+        flash("This email is not authorized to access MediaVault", "error")
         return redirect(url_for("trigger_auth"))
 
     user_id = ensure_user_exists(email)

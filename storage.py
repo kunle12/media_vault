@@ -3,7 +3,6 @@
 import os
 import urllib.parse
 from abc import ABC, abstractmethod
-from io import BytesIO
 from typing import Any, Optional
 
 import boto3
@@ -285,12 +284,11 @@ class AzureStorage(StorageBackend):
         """Upload file to Azure and return the blob name."""
         blob_name = self._get_blob_name(filename)
         file_obj.seek(0)
-        file_content = file_obj.read()
 
         try:
             blob = self.client.get_blob_client(container=self.container, blob=blob_name)
 
-            blob.upload_blob(BytesIO(file_content), overwrite=True)
+            blob.upload_blob(file_obj, overwrite=True)
         except AzureError as e:
             raise AzureUploadError(f"Failed to upload to Azure: {str(e)}") from e
         return blob_name
@@ -316,43 +314,44 @@ class AzureStorage(StorageBackend):
         self, key: str, filename: str, expires_in: int = 3600, inline: bool = False
     ) -> str:
         """Generate SAS URL for Azure blob."""
+        import datetime
+
         try:
             account_key = getattr(
                 getattr(self.client, "credential", None), "account_key", None
             )
+            disposition = "inline" if inline else "attachment"
+
             if account_key:
+                expiry = datetime.datetime.utcnow() + datetime.timedelta(
+                    seconds=expires_in
+                )
+                try:
+                    filename.encode("ascii")
+                    content_disposition = f'{disposition}; filename="{filename}"'
+                except UnicodeEncodeError:
+                    encoded = urllib.parse.quote(filename)
+                    content_disposition = f"{disposition}; filename*=UTF-8''{encoded}"
+
                 sas_token = generate_blob_sas(
                     account_name=self.client.account_name,
                     container_name=self.container,
                     blob_name=key,
                     account_key=account_key,
-                    expiry=__import__("datetime").datetime.utcnow()
-                    + __import__("datetime").timedelta(seconds=expires_in),
+                    expiry=expiry,
+                    content_disposition=content_disposition,
                 )
-                base_url = self.client.get_blob_client(
+                blob_client = self.client.get_blob_client(
                     container=self.container, blob=key
-                ).url
-                url = f"{base_url}?{sas_token}"
-                return url
+                )
+                base_url = blob_client.url
+                return f"{base_url}?{sas_token}"
+
             blob_client = self.client.get_blob_client(
                 container=self.container, blob=key
             )
-            base_url = blob_client.url
+            return blob_client.url
         except AzureError as e:
-            raise AzureDownloadError(
-                f"Failed to generate download URL: {str(e)}"
-            ) from e
-
-        disposition = "inline" if inline else "attachment"
-        try:
-            try:
-                filename.encode("ascii")
-                filename_param = f'filename="{filename}"'
-            except UnicodeEncodeError:
-                encoded = urllib.parse.quote(filename)
-                filename_param = f"filename*=UTF-8''{encoded}"
-            return f"{base_url}?{disposition}; {filename_param}"
-        except Exception as e:
             raise AzureDownloadError(
                 f"Failed to generate download URL: {str(e)}"
             ) from e
