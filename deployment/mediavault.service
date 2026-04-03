@@ -1,0 +1,22 @@
+[Unit]
+Description=MediaVault Flask Application
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/mediavault
+Environment="PATH=/var/www/mediavault/venv/bin:/usr/bin:/usr/local/bin"
+EnvironmentFile=/var/www/mediavault/.env
+
+ExecStart=/var/www/mediavault/venv/bin/gunicorn --bind 127.0.0.1:5050 --workers 1 --timeout 120 app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
