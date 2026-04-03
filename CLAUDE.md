@@ -90,6 +90,10 @@ The app runs on `http://localhost:5050`
 | AZURE_STORAGE_KEY | - | Azure storage account key |
 | AZURE_CONTAINER | media | Azure blob container name |
 | AZURE_CONNECTION_STRING | - | Azure connection string (alternative to account/key) |
+| AZURE_STORAGE_ACCOUNT | - | Azure storage account name (enables Azure storage) |
+| AZURE_STORAGE_KEY | - | Azure storage account key |
+| AZURE_CONTAINER | media | Azure blob container name |
+| AZURE_CONNECTION_STRING | - | Azure connection string (alternative to account/key) |
 | EMAIL_PROVIDER | generic | generic or aws_ses |
 | SMTP_HOST | - | SMTP server |
 | SMTP_PORT | 587 | SMTP port |
@@ -147,10 +151,11 @@ media = cursor.fetchall()
 conn.close()
 ```
 
-## S3 Error Handling
+## Storage Error Handling
 
 Storage errors are handled via custom exception classes in `storage.py`:
 
+### S3
 - `StorageError` - Base exception with `is_retryable` flag
 - `S3ConnectionError` - S3 connection failure (retryable)
 - `S3UploadError` - Upload failure (retryable)
@@ -159,10 +164,7 @@ Storage errors are handled via custom exception classes in `storage.py`:
 
 All S3 operations wrap boto3 exceptions (`ClientError`, `BotoCoreError`, `EndpointConnectionError`) and provide user-friendly error messages.
 
-## Azure Error Handling
-
-Azure storage operations use custom exception classes in `storage.py`:
-
+### Azure
 - `AzureConnectionError` - Azure connection failure (retryable)
 - `AzureUploadError` - Upload failure (retryable)
 - `AzureDownloadError` - Download/URL generation failure (non-retryable)

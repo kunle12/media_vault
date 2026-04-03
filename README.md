@@ -51,13 +51,13 @@ A Flask-based personal multimedia management application that allows users to up
    ```env
    # Email provider: generic, aws_ses
    EMAIL_PROVIDER=aws_ses
-   
+
    # AWS SES (if using AWS SES)
    AWS_REGION=us-east-1
    SMTP_USER=AKIxxxxxxxxxxxx
    SMTP_PASSWORD=BPxxxxxxxxxxxxxxxxxxxxx
    FROM_EMAIL=noreply@yourdomain.com
-   
+
    # Or Gmail/Other SMTP
    # SMTP_HOST=smtp.gmail.com
    # SMTP_PORT=587
@@ -203,10 +203,19 @@ The following configuration options can be set via environment variables:
 | AWS_DEFAULT_REGION | AWS default region |
 | S3_ENDPOINT | Custom S3 endpoint (for MinIO, etc.) |
 
+### Azure Blob Storage Configuration
+
+| Variable | Description |
+|----------|-------------|
+| AZURE_STORAGE_ACCOUNT | Azure storage account name (enables Azure storage) |
+| AZURE_STORAGE_KEY | Azure storage account key |
+| AZURE_CONTAINER | Blob container name (default: media) |
+| AZURE_CONNECTION_STRING | Alternative to account/key - full connection string |
+
 ### Non-ASCII Filename Support
 
-MediaVault properly handles filenames with non-ASCII characters (e.g., Chinese, Japanese, Russian). 
-Filenames are encoded using RFC 5987 (`filename*=UTF-8''...`) in Content-Disposition headers 
+MediaVault properly handles filenames with non-ASCII characters (e.g., Chinese, Japanese, Russian).
+Filenames are encoded using RFC 5987 (`filename*=UTF-8''...`) in Content-Disposition headers
 to ensure browser compatibility for both streaming and download.
 
 ## Allowed File Formats
