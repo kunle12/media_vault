@@ -528,9 +528,10 @@ def delete_media(media_id):
     return redirect(url_for("dashboard"))
 
 
+ensure_upload_folder()
+init_db()
+
 if __name__ == "__main__":
-    ensure_upload_folder()
-    init_db()
     app.run(host="0.0.0.0", port=5050, debug=False)
 
 # WSGI application for Gunicorn
