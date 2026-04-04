@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Any
 
 import requests
 from flask import (
@@ -20,11 +21,7 @@ from flask import (
     session,
     url_for,
 )
-
-try:
-    from authlib.integrations.flask_client import OAuth
-except ImportError:
-    OAuth = None
+from loguru import logger
 
 from config import Config
 from config import is_google_oauth_enabled as check_google_oauth
@@ -32,12 +29,12 @@ from config import is_google_oauth_enabled as check_google_oauth
 auth_bp = Blueprint("auth", __name__)
 
 
-def is_google_oauth_enabled():
+def is_google_oauth_enabled() -> bool:
     """Check if Google OAuth is configured."""
     return check_google_oauth()
 
 
-def get_google_user_info(access_token):
+def get_google_user_info(access_token: str) -> dict | None:
     """Fetch user info from Google OAuth2."""
     try:
         resp = requests.get(
@@ -47,12 +44,13 @@ def get_google_user_info(access_token):
         )
         if resp.status_code == 200:
             return resp.json()
-    except requests.RequestException:
-        pass
+        logger.error(f"Google user info returned {resp.status_code}")
+    except requests.RequestException as e:
+        logger.error(f"Google user info request failed: {e}")
     return None
 
 
-def is_oauth_state_valid():
+def is_oauth_state_valid() -> bool:
     """Check if OAuth state exists and hasn't expired."""
     oauth_state = session.get("oauth_state")
     if not oauth_state:
@@ -74,7 +72,7 @@ RATE_LIMIT_SECONDS = 60  # Prevent spam
 OAUTH_STATE_EXPIRY = 600  # 10 minutes
 
 
-def load_allowed_emails():
+def load_allowed_emails() -> set:
     """Load allowed emails from ALLOWED_EMAILS environment variable."""
     try:
         cache = get_cache()
@@ -101,15 +99,20 @@ def load_allowed_emails():
     return allowed
 
 
-def generate_code():
+def generate_code() -> str:
     """Generate a random verification code."""
     return "".join(
         random.choices(string.ascii_uppercase + string.digits, k=CODE_LENGTH)
     )
 
 
-def get_cache():
-    """Get the Flask cache instance."""
+def get_cache() -> Any:
+    """Get the Flask cache instance.
+
+    NOTE: When CACHE_TYPE=simple, each Gunicorn worker has its own in-memory
+    cache. Codes stored in one worker won't be visible to another. Use
+    CACHE_TYPE=redis or run with --workers=1 to avoid this issue.
+    """
     cache_ext = current_app.extensions.get("cache")
     if cache_ext is None:
         raise RuntimeError("Cache not initialized")
@@ -120,7 +123,7 @@ def get_cache():
     return cache_ext
 
 
-def store_code(email, code):
+def store_code(email: str, code: str) -> None:
     """Store authentication code in cache with expiry."""
     cache = get_cache()
     key = f"auth_code:{email}"
@@ -136,21 +139,21 @@ def store_code(email, code):
     )
 
 
-def get_code_data(email):
+def get_code_data(email: str) -> dict | None:
     """Retrieve stored code data from cache."""
     cache = get_cache()
     key = f"auth_code:{email}"
     return cache.get(key)
 
 
-def delete_code(email):
+def delete_code(email: str) -> None:
     """Remove code from cache."""
     cache = get_cache()
     key = f"auth_code:{email}"
     cache.delete(key)
 
 
-def is_code_expired(code_data):
+def is_code_expired(code_data: dict | None) -> bool:
     """Check if the code has expired."""
     if not code_data:
         return True
@@ -158,7 +161,7 @@ def is_code_expired(code_data):
     return elapsed > CODE_EXPIRY_SECONDS
 
 
-def send_email(to_email, code):
+def send_email(to_email: str, code: str) -> bool:
     """Send verification email with the code."""
     email_provider = Config.EMAIL_PROVIDER()
 
@@ -169,7 +172,7 @@ def send_email(to_email, code):
     from_email = Config.FROM_EMAIL()
 
     if not smtp_user or not smtp_password:
-        print(f"[DEBUG] Email would be sent to {to_email} with code: {code}")
+        logger.debug(f"Email debug mode: code {code} for {to_email}")
         return True
 
     if email_provider == "aws_ses":
@@ -208,19 +211,19 @@ def send_email(to_email, code):
             server.send_message(msg)
 
         return True
-    except Exception as e:
-        print(f"Failed to send email: {e}")
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error sending email to {to_email}: {e}")
         return False
 
 
-def get_db_connection():
+def get_db_connection() -> sqlite3.Connection:
     """Get SQLite database connection."""
     conn = sqlite3.connect(current_app.config["DATABASE"])
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def ensure_user_exists(email):
+def ensure_user_exists(email: str) -> int | None:
     """Create user if not exists, return user ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -240,7 +243,7 @@ def ensure_user_exists(email):
     return user["id"] if user else None
 
 
-def check_rate_limit(email):
+def check_rate_limit(email: str) -> bool:
     """Check if email has exceeded rate limit for code requests."""
     cache = get_cache()
     key = f"rate_limit:{email}"
@@ -252,7 +255,7 @@ def check_rate_limit(email):
 
 
 @auth_bp.route("/auth/request-code", methods=["POST"])
-def request_code():
+def request_code() -> Any:
     """Request a verification code to be sent to the user's email."""
     data = request.get_json()
     email = data.get("email", "").strip().lower()
@@ -289,7 +292,7 @@ def request_code():
 
 
 @auth_bp.route("/auth/verify-code", methods=["POST"])
-def verify_code():
+def verify_code() -> Any:
     """Verify the code and create a session if valid."""
     data = request.get_json()
     email = data.get("email", "").strip().lower()
@@ -302,6 +305,7 @@ def verify_code():
 
     if not code_data or is_code_expired(code_data):
         delete_code(email)
+        logger.warning(f"Expired/missing code for {email}")
         return jsonify(
             {
                 "success": False,
@@ -314,6 +318,7 @@ def verify_code():
 
     if code_data["attempts"] >= MAX_RETRY_ATTEMPTS:
         delete_code(email)
+        logger.warning(f"Too many failed attempts for {email}")
         return jsonify(
             {
                 "success": False,
@@ -329,6 +334,7 @@ def verify_code():
             timeout=CODE_EXPIRY_SECONDS,
         )
         remaining = MAX_RETRY_ATTEMPTS - code_data["attempts"]
+        logger.warning(f"Incorrect code for {email}, {remaining} attempts remaining")
         return jsonify(
             {
                 "success": False,
@@ -348,14 +354,14 @@ def verify_code():
 
 
 @auth_bp.route("/auth/logout", methods=["POST"])
-def logout():
+def logout() -> Any:
     """Clear the user session."""
     session.clear()
     return jsonify({"success": True})
 
 
 @auth_bp.route("/auth/status", methods=["GET"])
-def status():
+def status() -> Any:
     """Check if user is authenticated."""
     return jsonify(
         {
@@ -367,7 +373,7 @@ def status():
 
 
 @auth_bp.route("/auth/session-status", methods=["GET"])
-def session_status():
+def session_status() -> Any:
     """Check session expiry status."""
     if "user_id" in session:
         session_timeout = Config.SESSION_TIMEOUT_MINUTES() * 60
@@ -389,7 +395,7 @@ def session_status():
 
 
 @auth_bp.route("/auth/refresh-session", methods=["POST"])
-def refresh_session():
+def refresh_session() -> Any:
     """Refresh the session timeout."""
     if "user_id" in session:
         session.modified = True
@@ -398,7 +404,7 @@ def refresh_session():
 
 
 @auth_bp.route("/auth/google/login", methods=["GET"])
-def google_login():
+def google_login() -> Any:
     """Initiate Google OAuth flow."""
     if not is_google_oauth_enabled():
         return redirect(url_for("trigger_auth"))
@@ -418,7 +424,7 @@ def google_login():
 
 
 @auth_bp.route("/auth/google/callback", methods=["GET"])
-def google_callback():
+def google_callback() -> Any:
     """Handle Google OAuth callback."""
     if not is_google_oauth_enabled():
         return redirect(url_for("trigger_auth"))

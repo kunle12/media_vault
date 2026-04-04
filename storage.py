@@ -131,6 +131,7 @@ class LocalStorage(StorageBackend):
     """Local filesystem storage backend."""
 
     def __init__(self, upload_folder: str):
+        """Initialize local filesystem storage at upload_folder."""
         self.upload_folder = upload_folder
         self.videos_dir = os.path.join(upload_folder, "videos")
         self.audios_dir = os.path.join(upload_folder, "audios")
@@ -173,6 +174,7 @@ class LocalStorage(StorageBackend):
         return key
 
     def is_s3(self) -> bool:
+        """Return False — this is not S3."""
         return False
 
 
@@ -186,6 +188,7 @@ class S3Storage(StorageBackend):
         prefix: str = "",
         endpoint_url: Optional[str] = None,
     ):
+        """Initialize S3 storage client."""
         self.bucket = bucket
         self.prefix = prefix.rstrip("/") + "/" if prefix else ""
 
@@ -252,6 +255,7 @@ class S3Storage(StorageBackend):
             raise S3DownloadError(f"Failed to generate download URL: {str(e)}") from e
 
     def is_s3(self) -> bool:
+        """Return True — this is S3."""
         return True
 
 
@@ -265,6 +269,7 @@ class AzureStorage(StorageBackend):
         container: str = "media",
         connection_string: Optional[str] = None,
     ):
+        """Initialize Azure Blob Storage client."""
         self.container = container
         self.account_name = account_name
         self.account_key = account_key
@@ -364,6 +369,7 @@ class AzureStorage(StorageBackend):
             ) from e
 
     def is_s3(self) -> bool:
+        """Return False — this is not S3."""
         return False
 
 

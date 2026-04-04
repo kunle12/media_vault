@@ -6,6 +6,7 @@ import sys
 import uuid
 from datetime import timedelta
 from functools import wraps
+from typing import Any
 
 from flask import (
     Flask,
@@ -75,12 +76,13 @@ app.jinja_env.globals["application_root"] = (
 )
 
 _original_route = app.route
+_app_root = application_root
 
 
 def prefix_route(route, *args, **kwargs):
     """Add application_root prefix to routes."""
-    if application_root != "/" and not route.startswith(application_root):
-        route = application_root.rstrip("/") + "/" + route.lstrip("/")
+    if _app_root != "/" and not route.startswith(_app_root):
+        route = _app_root.rstrip("/") + "/" + route.lstrip("/")
     return _original_route(route, *args, **kwargs)
 
 
@@ -90,20 +92,37 @@ app.register_blueprint(
     auth_bp, url_prefix=application_root if application_root != "/" else None
 )
 
+
+@app.after_request
+def add_security_headers(response: Response) -> Response:
+    """Add Content-Security-Policy and other security headers."""
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "form-action 'self'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 # Initialize storage backend
 storage = get_storage_backend()
 logger.info(f"Storage backend initialized: {type(storage).__name__}")
 
 
 # Database setup
-def get_db_connection():
+def get_db_connection() -> sqlite3.Connection:
     """Get SQLite database connection."""
     conn = sqlite3.connect(app.config["DATABASE"])
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
+def init_db() -> None:
     """Initialize database tables and indexes."""
     with app.app_context():
         conn = get_db_connection()
@@ -137,7 +156,7 @@ def init_db():
         conn.close()
 
 
-def ensure_upload_folder():
+def ensure_upload_folder() -> None:
     """Create upload folder if it doesn't exist."""
     if not is_s3_enabled():
         upload_folder = app.config["UPLOAD_FOLDER"]
@@ -146,7 +165,7 @@ def ensure_upload_folder():
 
 
 # Helper functions
-def allowed_file(filename):
+def allowed_file(filename: str) -> bool:
     """Check if filename has an allowed extension."""
     return (
         "." in filename
@@ -158,7 +177,7 @@ def login_required(f):
     """Decorator to require authentication for routes."""
 
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> Any:
         if "user_id" not in session:
             return render_template("auth_trigger.html")
         return f(*args, **kwargs)
@@ -168,7 +187,7 @@ def login_required(f):
 
 # Routes
 @app.route("/")
-def index():
+def index() -> Any:
     """Home page - redirect to dashboard if authenticated."""
     if "user_id" in session:
         return redirect(url_for("dashboard"))
@@ -176,14 +195,14 @@ def index():
 
 
 @app.route("/trigger-auth")
-def trigger_auth():
+def trigger_auth() -> Any:
     """Render the auth trigger page."""
     return render_template("auth_trigger.html")
 
 
 @app.route("/dashboard")
 @login_required
-def dashboard():
+def dashboard() -> Any:
     """User dashboard showing their uploaded media."""
     sort = request.args.get("sort")
 
@@ -232,7 +251,7 @@ def dashboard():
 
 @app.route("/dashboard/set_sort", methods=["POST"])
 @login_required
-def set_sort_preference():
+def set_sort_preference() -> Any:
     """Save user's sort preference to session."""
     sort = request.form.get("sort", "newest")
     valid_sorts = [
@@ -252,7 +271,7 @@ def set_sort_preference():
 
 @app.route("/upload", methods=["GET", "POST"])
 @login_required
-def upload():
+def upload() -> Any:
     """Handle file upload - GET shows form, POST processes uploads."""
     if request.method == "POST":
         files = request.files.getlist("files")
@@ -310,6 +329,10 @@ def upload():
                     logger.error(f"Storage error during upload: {e}")
                     s3_error = str(e)
                     break
+                except OSError as e:
+                    logger.error(f"OS error during upload: {e}")
+                    s3_error = f"OS error: {str(e)}"
+                    break
                 except Exception as e:
                     logger.exception(f"Unexpected error during upload: {e}")
                     s3_error = f"Unexpected error: {str(e)}"
@@ -335,10 +358,18 @@ def upload():
     return render_template("upload.html", max_size_mb=max_size_mb)
 
 
+def validate_media_id(media_id: int) -> bool:
+    """Return False if media_id is non-positive (invalid)."""
+    return media_id > 0
+
+
 @app.route("/media/<int:media_id>")
 @login_required
-def view_media(media_id):
+def view_media(media_id: int) -> Any:
     """Display a single media file by ID."""
+    if not validate_media_id(media_id):
+        flash("Invalid media ID", "error")
+        return redirect(url_for("dashboard"))
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -444,8 +475,11 @@ def parse_range_header(range_header: str, file_size: int) -> tuple | None:
 
 @app.route("/media/<int:media_id>/play")
 @login_required
-def play_media(media_id):
+def play_media(media_id: int) -> Any:
     """Stream a media file by ID for playback with range request support."""
+    if not validate_media_id(media_id):
+        flash("Invalid media ID", "error")
+        return redirect(url_for("dashboard"))
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -552,8 +586,11 @@ def play_media(media_id):
 
 @app.route("/media/<int:media_id>/download")
 @login_required
-def download_media(media_id):
+def download_media(media_id: int) -> Any:
     """Download a media file by ID."""
+    if not validate_media_id(media_id):
+        flash("Invalid media ID", "error")
+        return redirect(url_for("dashboard"))
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -612,8 +649,11 @@ def download_media(media_id):
 
 @app.route("/media/<int:media_id>/delete", methods=["POST"])
 @login_required
-def delete_media(media_id):
+def delete_media(media_id: int) -> Any:
     """Delete a media file by ID."""
+    if not validate_media_id(media_id):
+        flash("Invalid media ID", "error")
+        return redirect(url_for("dashboard"))
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(

@@ -5,8 +5,9 @@ import shutil
 import tempfile
 from unittest.mock import MagicMock, patch
 
-os.environ["SECRET_KEY"] = "test-secret-key"
-os.environ["ALLOWED_EMAILS"] = "user@example.com"
+# These are set in conftest.py — only set if conftest hasn't run yet
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
+os.environ.setdefault("ALLOWED_EMAILS", "user@example.com")
 os.environ.pop("S3_BUCKET", None)
 os.environ.pop("S3_ENDPOINT", None)
 
@@ -146,15 +147,25 @@ def test_upload_get_authenticated(authenticated_client):
 
 def test_upload_file(authenticated_client):
     """Test uploading a file."""
-    with open("audiosample1.wav", "rb") as f:
-        response = authenticated_client.post(
-            "/upload",
-            data={"video": f},
-            content_type="multipart/form-data",
-        )
+    upload_folder = tempfile.mkdtemp()
+    os.environ["UPLOAD_FOLDER"] = upload_folder
+    try:
+        test_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        test_file.write(b"fake audio content")
+        test_file.close()
 
-    assert response.status_code == 302
-    assert "/dashboard" in response.location
+        with open(test_file.name, "rb") as f:
+            response = authenticated_client.post(
+                "/upload",
+                data={"files": f},
+                content_type="multipart/form-data",
+            )
+
+        assert response.status_code == 302
+        assert "/dashboard" in response.location
+        os.unlink(test_file.name)
+    finally:
+        shutil.rmtree(upload_folder, ignore_errors=True)
 
 
 def test_upload_invalid_file(authenticated_client):
@@ -170,7 +181,7 @@ def test_upload_invalid_file(authenticated_client):
         with open(test_file.name, "rb") as f:
             response = authenticated_client.post(
                 "/upload",
-                data={"video": f},
+                data={"files": f},
                 content_type="multipart/form-data",
             )
 
