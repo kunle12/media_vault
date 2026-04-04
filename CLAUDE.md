@@ -103,7 +103,7 @@ The app runs on `http://localhost:5050`
 
 ## Allowed File Extensions
 
-**Video**: mp4, avi, mov, mkv, wmv, flv, webm
+**Video**: mp4, avi, mov, wmv, flv, webm
 **Audio**: mp3, wav, ogg
 **Image**: png, jpg, jpeg, gif, webp, bmp, heic
 

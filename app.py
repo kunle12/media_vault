@@ -47,7 +47,7 @@ app.config["SECRET_KEY"] = Config.SECRET_KEY()
 app.config["WTF_CSRF_ENABLED"] = True
 app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["UPLOAD_FOLDER"] = Config.UPLOAD_FOLDER()
-app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH
+app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH()
 app.config["ALLOWED_EXTENSIONS"] = Config.ALLOWED_EXTENSIONS
 app.config["DATABASE"] = Config.DATABASE()
 app.config["APPLICATION_ROOT"] = Config.APPLICATION_ROOT()
@@ -210,17 +210,19 @@ def dashboard():
         "size_desc": "file_size DESC",
         "size_asc": "file_size ASC",
         "type": """CASE
-            WHEN filename GLOB '*.mp4' OR filename GLOB '*.avi' OR filename GLOB '*.mov' OR filename GLOB '*.mkv' OR filename GLOB '*.wmv' OR filename GLOB '*.flv' OR filename GLOB '*.webm' THEN 1
+            WHEN filename GLOB '*.mp4' OR filename GLOB '*.avi' OR filename GLOB '*.mov' OR filename GLOB '*.wmv' OR filename GLOB '*.flv' OR filename GLOB '*.webm' THEN 1
             WHEN filename GLOB '*.mp3' OR filename GLOB '*.wav' OR filename GLOB '*.ogg' THEN 2
             ELSE 3 END, uploaded_at DESC""",
     }
 
+    if sort not in valid_sorts:
+        sort = "newest"
     order_by = order_by_clauses[sort]
 
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT * FROM media WHERE user_id = ? ORDER BY {order_by}",
+        "SELECT * FROM media WHERE user_id = ? ORDER BY " + order_by,
         (session["user_id"],),
     )
     media = cursor.fetchall()
@@ -329,7 +331,8 @@ def upload():
 
         return redirect(url_for("dashboard"))
 
-    return render_template("upload.html")
+    max_size_mb = Config.MAX_CONTENT_LENGTH() // (1024 * 1024)
+    return render_template("upload.html", max_size_mb=max_size_mb)
 
 
 @app.route("/media/<int:media_id>")
@@ -371,7 +374,6 @@ def get_mime_type(filename: str) -> str:
         "mp4": "video/mp4",
         "avi": "video/x-msvideo",
         "mov": "video/quicktime",
-        "mkv": "video/x-matroska",
         "wmv": "video/x-ms-wmv",
         "flv": "video/x-flv",
         "webm": "video/webm",
@@ -382,10 +384,68 @@ def get_mime_type(filename: str) -> str:
     return mime_types.get(ext, "application/octet-stream")
 
 
+def parse_range_header(range_header: str, file_size: int) -> tuple | None:
+    """Parse HTTP Range header, returning (start, end) or None if invalid.
+
+    Supports: 'bytes=start-end', 'bytes=start-', 'bytes=-end' (suffix).
+    Returns None for malformed requests (caller should return 416).
+    """
+    if not range_header.startswith("bytes="):
+        return None
+    range_val = range_header[6:]
+    if "," in range_val:
+        return None
+    range_val = range_val.strip()
+    if range_val == "":
+        return None
+
+    if range_val.startswith("-"):
+        try:
+            suffix = int(range_val)
+            if suffix <= 0:
+                return None
+            start = max(0, file_size - suffix)
+            end = file_size - 1
+            return (start, end)
+        except ValueError:
+            return None
+
+    parts = range_val.split("-", 1)
+    if len(parts) != 2:
+        return None
+
+    start_str, end_str = parts
+    if start_str == "":
+        return None
+
+    try:
+        start = int(start_str)
+    except ValueError:
+        return None
+
+    if start < 0:
+        return None
+
+    if end_str == "":
+        end = file_size - 1
+    else:
+        try:
+            end = int(end_str)
+        except ValueError:
+            return None
+        if end >= file_size:
+            end = file_size - 1
+
+    if start > end:
+        return None
+
+    return (start, end)
+
+
 @app.route("/media/<int:media_id>/play")
 @login_required
 def play_media(media_id):
-    """Stream a media file by ID for playback."""
+    """Stream a media file by ID for playback with range request support."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -404,7 +464,7 @@ def play_media(media_id):
     if is_s3_enabled():
         try:
             presigned_url = storage.get_url(
-                media["storage_key"], media["original_filename"]
+                media["storage_key"], media["original_filename"], inline=True
             )
             return redirect(presigned_url)
         except StorageError as e:
@@ -412,30 +472,82 @@ def play_media(media_id):
             return redirect(url_for("dashboard"))
     else:
         file_path = media["storage_key"]
+        file_size = media["file_size"]
+
+        range_header = request.headers.get("Range", "")
+        if range_header:
+            try:
+                byte_range = parse_range_header(range_header, file_size)
+                if byte_range is None:
+                    return Response(status=416)
+
+                start, end = byte_range
+                length = end - start + 1
+
+                try:
+                    f = open(file_path, "rb")
+                except FileNotFoundError:
+                    flash("File not found on disk", "error")
+                    return redirect(url_for("dashboard"))
+                except OSError as e:
+                    flash(f"Failed to read file: {e}", "error")
+                    return redirect(url_for("dashboard"))
+
+                f.seek(start)
+
+                def generate():
+                    try:
+                        remaining = length
+                        while remaining > 0:
+                            chunk_size = min(8192, remaining)
+                            chunk = f.read(chunk_size)
+                            if not chunk:
+                                break
+                            remaining -= len(chunk)
+                            yield chunk
+                    finally:
+                        f.close()
+
+                return Response(
+                    generate(),
+                    status=206,
+                    mimetype=mime_type,
+                    headers={
+                        "Accept-Ranges": "bytes",
+                        "Content-Range": f"bytes {start}-{end}/{file_size}",
+                        "Content-Length": length,
+                    },
+                )
+            except (ValueError, OSError):
+                return Response(status=416)
 
         try:
-
-            def generate():
-                with open(file_path, "rb") as f:
-                    while True:
-                        chunk = f.read(8192)
-                        if not chunk:
-                            break
-                        yield chunk
-
-            return Response(
-                generate(),
-                mimetype=mime_type,
-                headers={
-                    "Accept-Ranges": "bytes",
-                },
-            )
+            f = open(file_path, "rb")
         except FileNotFoundError:
             flash("File not found on disk", "error")
             return redirect(url_for("dashboard"))
-        except StorageError as e:
+        except OSError as e:
             flash(f"Failed to read file: {e}", "error")
             return redirect(url_for("dashboard"))
+
+        def generate():
+            try:
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                f.close()
+
+        return Response(
+            generate(),
+            mimetype=mime_type,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Length": file_size,
+            },
+        )
 
 
 @app.route("/media/<int:media_id>/download")
@@ -470,21 +582,24 @@ def download_media(media_id):
         file_path = media["storage_key"]
 
         try:
-
-            def generate():
-                with open(file_path, "rb") as f:
-                    while True:
-                        chunk = f.read(8192)
-                        if not chunk:
-                            break
-                        yield chunk
-
+            f = open(file_path, "rb")
         except FileNotFoundError:
             flash("File not found on disk", "error")
             return redirect(url_for("dashboard"))
-        except StorageError as e:
+        except OSError as e:
             flash(f"Failed to read file: {e}", "error")
             return redirect(url_for("dashboard"))
+
+        def generate():
+            try:
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                f.close()
+
         return Response(
             generate(),
             mimetype="application/octet-stream",

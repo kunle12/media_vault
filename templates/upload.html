@@ -16,12 +16,12 @@
                         <div class="flex text-sm text-gray-600">
                             <label for="files" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
                                 <span>Upload files</span>
-                                <input id="files" name="files" type="file" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic" multiple class="sr-only" required>
+                                <input id="files" name="files" type="file" accept=".mp4,.avi,.mov,.wmv,.flv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic" multiple class="sr-only" required>
                             </label>
                             <p class="pl-1">or drag and drop</p>
                         </div>
                         <p class="text-xs text-gray-500">
-                            MP4, AVI, MOV, MKV, WMV, FLV, WEBM, MP3, WAV, OGG, PNG, JPG, JPEG, GIF, WEBP, BMP, HEIC up to 500MB each
+                            MP4, AVI, MOV, MKV, WMV, FLV, WEBM, MP3, WAV, OGG, PNG, JPG, JPEG, GIF, WEBP, BMP, HEIC up to {{ max_size_mb }}MB each
                         </p>
                     </div>
                 </div>
@@ -41,10 +41,13 @@
 </div>
 
 <script>
-    document.getElementById('files').addEventListener('change', function(e) {
+    const fileInput = document.getElementById('files');
+    const dropZone = document.querySelector('.border-dashed');
+    let dragCounter = 0;
+
+    function updateFileList(files) {
         const fileList = document.getElementById('file-list');
         fileList.innerHTML = '';
-        const files = e.target.files;
         if (files.length > 0) {
             document.getElementById('files-selected').classList.remove('hidden');
             for (let i = 0; i < files.length; i++) {
@@ -52,7 +55,49 @@
                 li.textContent = files[i].name;
                 fileList.appendChild(li);
             }
+        } else {
+            document.getElementById('files-selected').classList.add('hidden');
         }
+    }
+
+    fileInput.addEventListener('change', function(e) {
+        updateFileList(e.target.files);
+    });
+
+    dropZone.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) {
+            dropZone.classList.add('border-blue-500', 'bg-blue-50');
+        }
+    });
+
+    dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+    });
+
+    dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0) {
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+        }
+    });
+
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dragCounter = 0;
+        dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+
+        const droppedFiles = e.dataTransfer.files;
+        if (droppedFiles.length === 0) return;
+
+        const dt = new DataTransfer();
+        for (const file of droppedFiles) {
+            dt.items.add(file);
+        }
+        fileInput.files = dt.files;
+        updateFileList(droppedFiles);
     });
 </script>
 {% endblock %}

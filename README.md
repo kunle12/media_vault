@@ -5,7 +5,7 @@ A Flask-based personal multimedia management application that allows users to up
 ## Features
 
 - **Passwordless Authentication**: Email-based verification code login
-- **Media Upload**: Upload media files (video: mp4, avi, mov, mkv, wmv, flv, webm; audio: mp3, wav, ogg; image: png, jpg, jpeg, gif, webp, bmp, heic) up to 500MB
+- **Media Upload**: Upload media files (video: mp4, avi, mov, wmv, flv, webm; audio: mp3, wav, ogg; image: png, jpg, jpeg, gif, webp, bmp, heic) up to 500MB (configurable via MAX_CONTENT_LENGTH_MB)
 - **Media Management**: View, stream, download, and delete your uploaded files
 - **Dashboard**: Personal dashboard showing all your uploaded media
 - **Non-ASCII Filename Support**: Full support for filenames with non-ASCII characters (Chinese, Japanese, Russian, etc.)
@@ -174,7 +174,7 @@ The following configuration options can be set via environment variables:
 | SECRET_KEY | random 32-byte hex | Flask secret key (auto-generated) |
 | WTF_CSRF_ENABLED | True | Enable CSRF protection |
 | UPLOAD_FOLDER | uploads | Directory for storing media |
-| MAX_CONTENT_LENGTH | 524288000 (500MB) | Maximum upload size |
+| MAX_CONTENT_LENGTH_MB | 500 | Maximum upload size in MB (e.g., 500) |
 | DATABASE | videodb.sqlite | SQLite database file |
 | CACHE_TYPE | simple | Cache type (simple, redis) |
 | EMAIL_PROVIDER | generic | Email provider (generic, aws_ses) |
@@ -224,7 +224,6 @@ to ensure browser compatibility for both streaming and download.
 - mp4
 - avi
 - mov
-- mkv
 - wmv
 - flv
 - webm

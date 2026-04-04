@@ -44,7 +44,7 @@
             <ul class="divide-y divide-gray-200">
                 {% for video in media %}
                     {% set ext = video.original_filename.split('.')[-1].lower() if '.' in video.original_filename else '' %}
-                    {% set is_video = ext in ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'webm'] %}
+                    {% set is_video = ext in ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'] %}
                     {% set is_audio = ext in ['mp3', 'wav', 'ogg'] %}
                     {% set is_image = ext in ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic'] %}
                     <li>

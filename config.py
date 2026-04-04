@@ -45,7 +45,11 @@ class Config:
         """Get upload folder path."""
         return Config.get("UPLOAD_FOLDER", "uploads")
 
-    MAX_CONTENT_LENGTH = 500 * 1024 * 1024
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def MAX_CONTENT_LENGTH() -> int:
+        """Get max upload size in bytes (set MAX_CONTENT_LENGTH_MB env var)."""
+        return Config.get_int("MAX_CONTENT_LENGTH_MB", 500) * 1024 * 1024
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -83,7 +87,6 @@ class Config:
         "mp4",
         "avi",
         "mov",
-        "mkv",
         "wmv",
         "flv",
         "webm",

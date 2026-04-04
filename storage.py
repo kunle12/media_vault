@@ -110,7 +110,7 @@ class StorageBackend(ABC):
         pass
 
 
-VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "wmv", "flv", "webm"}
+VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "wmv", "flv", "webm"}
 AUDIO_EXTENSIONS = {"mp3", "wav", "ogg"}
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "heic"}
 
