@@ -108,6 +108,29 @@ def test_dashboard_authenticated(authenticated_client):
     assert b"Dashboard" in response.data
 
 
+def test_dashboard_sort_options(authenticated_client):
+    """Test dashboard sorting with various sort options."""
+    sort_options = [
+        "newest",
+        "oldest",
+        "name_asc",
+        "name_desc",
+        "size_desc",
+        "size_asc",
+        "type",
+    ]
+    for sort in sort_options:
+        response = authenticated_client.get(f"/dashboard?sort={sort}")
+        assert response.status_code == 200
+
+
+def test_dashboard_sort_invalid_fallback(authenticated_client):
+    """Test dashboard falls back to default for invalid sort."""
+    response = authenticated_client.get("/dashboard?sort=invalid")
+    assert response.status_code == 200
+    assert b"Dashboard" in response.data
+
+
 def test_upload_requires_auth(client):
     """Test upload requires authentication."""
     response = client.get("/upload")

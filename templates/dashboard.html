@@ -4,10 +4,40 @@
 <div>
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Your Media Files</h1>
-        <a href="{{ url_for('upload') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
-            Upload New Media
-        </a>
+        <div class="flex items-center gap-3">
+            <div class="relative">
+                <select id="sort-select" class="appearance-none w-36 pl-3 pr-8 py-1.5 text-sm rounded-lg border border-gray-300 bg-white text-gray-700 cursor-pointer outline-none hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" onchange="handleSortChange()">
+                    <option value="newest" {{ 'selected' if current_sort == 'newest' else '' }}>Newest</option>
+                    <option value="oldest" {{ 'selected' if current_sort == 'oldest' else '' }}>Oldest</option>
+                    <option value="name_asc" {{ 'selected' if current_sort == 'name_asc' else '' }}>Name (A→Z)</option>
+                    <option value="name_desc" {{ 'selected' if current_sort == 'name_desc' else '' }}>Name (Z→A)</option>
+                    <option value="size_desc" {{ 'selected' if current_sort == 'size_desc' else '' }}>Largest</option>
+                    <option value="size_asc" {{ 'selected' if current_sort == 'size_asc' else '' }}>Smallest</option>
+                    <option value="type" {{ 'selected' if current_sort == 'type' else '' }}>By Type</option>
+                </select>
+                <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+            <a href="{{ url_for('upload') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                Upload New Media
+            </a>
+        </div>
     </div>
+
+    <form id="sort-form" method="POST" action="{{ url_for('set_sort_preference') }}" style="display: none;"></form>
+
+    <script>
+        function handleSortChange() {
+            const select = document.getElementById('sort-select');
+            const sortValue = select.value;
+            const form = document.getElementById('sort-form');
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'sort';
+            input.value = sortValue;
+            form.appendChild(input);
+            form.submit();
+        }
+    </script>
 
     {% if media %}
         <div class="bg-white shadow overflow-hidden sm:rounded-md">

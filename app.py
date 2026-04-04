@@ -185,15 +185,67 @@ def trigger_auth():
 @login_required
 def dashboard():
     """User dashboard showing their uploaded media."""
+    sort = request.args.get("sort")
+
+    if sort is None:
+        sort = session.get("sort_preference", "newest")
+
+    valid_sorts = [
+        "newest",
+        "oldest",
+        "name_asc",
+        "name_desc",
+        "size_desc",
+        "size_asc",
+        "type",
+    ]
+    if sort not in valid_sorts:
+        sort = "newest"
+
+    order_by_clauses = {
+        "newest": "uploaded_at DESC",
+        "oldest": "uploaded_at ASC",
+        "name_asc": "original_filename ASC",
+        "name_desc": "original_filename DESC",
+        "size_desc": "file_size DESC",
+        "size_asc": "file_size ASC",
+        "type": """CASE
+            WHEN filename GLOB '*.mp4' OR filename GLOB '*.avi' OR filename GLOB '*.mov' OR filename GLOB '*.mkv' OR filename GLOB '*.wmv' OR filename GLOB '*.flv' OR filename GLOB '*.webm' THEN 1
+            WHEN filename GLOB '*.mp3' OR filename GLOB '*.wav' OR filename GLOB '*.ogg' THEN 2
+            ELSE 3 END, uploaded_at DESC""",
+    }
+
+    order_by = order_by_clauses[sort]
+
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT * FROM media WHERE user_id = ? ORDER BY uploaded_at DESC",
+        f"SELECT * FROM media WHERE user_id = ? ORDER BY {order_by}",
         (session["user_id"],),
     )
     media = cursor.fetchall()
     conn.close()
-    return render_template("dashboard.html", media=media)
+    return render_template("dashboard.html", media=media, current_sort=sort)
+
+
+@app.route("/dashboard/set_sort", methods=["POST"])
+@login_required
+def set_sort_preference():
+    """Save user's sort preference to session."""
+    sort = request.form.get("sort", "newest")
+    valid_sorts = [
+        "newest",
+        "oldest",
+        "name_asc",
+        "name_desc",
+        "size_desc",
+        "size_asc",
+        "type",
+    ]
+    if sort not in valid_sorts:
+        sort = "newest"
+    session["sort_preference"] = sort
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/upload", methods=["GET", "POST"])
