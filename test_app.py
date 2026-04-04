@@ -232,6 +232,13 @@ def test_allowed_file_extensions():
     assert allowed_file("audio.mp3") is True
     assert allowed_file("audio.wav") is True
     assert allowed_file("audio.ogg") is True
+    assert allowed_file("image.png") is True
+    assert allowed_file("image.jpg") is True
+    assert allowed_file("image.jpeg") is True
+    assert allowed_file("image.gif") is True
+    assert allowed_file("image.webp") is True
+    assert allowed_file("image.bmp") is True
+    assert allowed_file("image.heic") is True
     assert allowed_file("file.txt") is False
     assert allowed_file("file") is False
     assert allowed_file("file.exe") is False

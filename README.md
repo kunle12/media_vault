@@ -1,11 +1,11 @@
 # MediaVault
 
-A Flask-based personal multimedia management application that allows users to upload, view, and manage their video and audio collection.
+A Flask-based personal multimedia management application that allows users to upload, view, and manage their video, audio, and image collection.
 
 ## Features
 
 - **Passwordless Authentication**: Email-based verification code login
-- **Media Upload**: Upload media files (media: mp4, avi, mov, mkv, wmv, flv, webm and audio: mp3, wav, ogg) up to 500MB
+- **Media Upload**: Upload media files (video: mp4, avi, mov, mkv, wmv, flv, webm; audio: mp3, wav, ogg; image: png, jpg, jpeg, gif, webp, bmp, heic) up to 500MB
 - **Media Management**: View, stream, download, and delete your uploaded files
 - **Dashboard**: Personal dashboard showing all your uploaded media
 - **Non-ASCII Filename Support**: Full support for filenames with non-ASCII characters (Chinese, Japanese, Russian, etc.)
@@ -233,6 +233,15 @@ to ensure browser compatibility for both streaming and download.
 - mp3
 - wav
 - ogg
+
+### Image
+- png
+- jpg
+- jpeg
+- gif
+- webp
+- bmp
+- heic
 
 ## License
 

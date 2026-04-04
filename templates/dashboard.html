@@ -5,10 +5,10 @@
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Your Media Files</h1>
         <a href="{{ url_for('upload') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
-            Upload New Video/Audio
+            Upload New Media
         </a>
     </div>
-    
+
     {% if media %}
         <div class="bg-white shadow overflow-hidden sm:rounded-md">
             <ul class="divide-y divide-gray-200">
@@ -48,7 +48,7 @@
         <div class="bg-white p-6 text-center rounded-lg shadow">
             <p class="text-gray-600 mb-4">You haven't uploaded any media files yet.</p>
             <a href="{{ url_for('upload') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
-                Upload Your First Video/Audio
+                Upload Your First Media
             </a>
         </div>
     {% endif %}

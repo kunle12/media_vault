@@ -10,10 +10,12 @@
             </a>
         </div>
     </div>
-    
+
     <div class="bg-white p-6 rounded-lg shadow mb-6">
         {% set ext = media.original_filename.split('.')[-1].lower() %}
-        {% if ext in ['mp3', 'wav', 'ogg'] %}
+        {% if ext in ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic'] %}
+        <img src="{{ url_for('play_media', media_id=media.id) }}" class="max-w-full max-h-96 mx-auto" alt="{{ media.original_filename }}">
+        {% elif ext in ['mp3', 'wav', 'ogg'] %}
         <audio controls class="w-full" preload="metadata">
             {% if ext == 'mp3' %}<source src="{{ url_for('play_media', media_id=media.id) }}" type="audio/mpeg">{% elif ext == 'wav' %}<source src="{{ url_for('play_media', media_id=media.id) }}" type="audio/wav">{% else %}<source src="{{ url_for('play_media', media_id=media.id) }}" type="audio/ogg">{% endif %}
             Your browser does not support the audio tag.
@@ -25,7 +27,7 @@
         </video>
         {% endif %}
     </div>
-    
+
     <div class="bg-white p-6 rounded-lg shadow">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

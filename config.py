@@ -90,6 +90,13 @@ class Config:
         "mp3",
         "wav",
         "ogg",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "bmp",
+        "heic",
     }
 
     @staticmethod

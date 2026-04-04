@@ -112,6 +112,7 @@ class StorageBackend(ABC):
 
 VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "wmv", "flv", "webm"}
 AUDIO_EXTENSIONS = {"mp3", "wav", "ogg"}
+IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "heic"}
 
 
 def get_media_subdir(filename: str) -> str:
@@ -121,6 +122,8 @@ def get_media_subdir(filename: str) -> str:
         return "videos"
     if ext in AUDIO_EXTENSIONS:
         return "audios"
+    if ext in IMAGE_EXTENSIONS:
+        return "images"
     return "videos"
 
 
@@ -131,16 +134,20 @@ class LocalStorage(StorageBackend):
         self.upload_folder = upload_folder
         self.videos_dir = os.path.join(upload_folder, "videos")
         self.audios_dir = os.path.join(upload_folder, "audios")
+        self.images_dir = os.path.join(upload_folder, "images")
         os.makedirs(self.videos_dir, exist_ok=True)
         os.makedirs(self.audios_dir, exist_ok=True)
+        os.makedirs(self.images_dir, exist_ok=True)
 
     def save(self, file_obj: Any, filename: str) -> str:
         """Save file to local disk in appropriate subdirectory."""
         subdir = get_media_subdir(filename)
         if subdir == "videos":
             target_dir = self.videos_dir
-        else:
+        elif subdir == "audios":
             target_dir = self.audios_dir
+        else:
+            target_dir = self.images_dir
         file_path = os.path.join(target_dir, filename)
         file_obj.save(file_path)
         return file_path

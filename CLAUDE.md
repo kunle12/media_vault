@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MediaVault is a Flask-based personal multimedia management application with passwordless email authentication. Users can upload, view, and manage their video and audio collection.
+MediaVault is a Flask-based personal multimedia management application with passwordless email authentication. Users can upload, view, and manage their video, audio, and image collection.
 
 ## Tech Stack
 
@@ -105,6 +105,7 @@ The app runs on `http://localhost:5050`
 
 **Video**: mp4, avi, mov, mkv, wmv, flv, webm
 **Audio**: mp3, wav, ogg
+**Image**: png, jpg, jpeg, gif, webp, bmp, heic
 
 ## Important Implementation Details
 
