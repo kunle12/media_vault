@@ -245,15 +245,40 @@ def dashboard() -> Any:
         sort = "newest"
     order_by = order_by_clauses[sort]
 
+    page = request.args.get("page", 1, type=int)
+    per_page = Config.ITEMS_PER_PAGE()
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT * FROM media WHERE user_id = ? ORDER BY " + order_by,
+        "SELECT COUNT(*) as count FROM media WHERE user_id = ?",
         (session["user_id"],),
+    )
+    total_items = cursor.fetchone()["count"]
+    total_pages = max(1, (total_items + per_page - 1) // per_page)
+
+    if page > total_pages:
+        page = total_pages
+        offset = (page - 1) * per_page
+
+    cursor.execute(
+        "SELECT * FROM media WHERE user_id = ? ORDER BY "
+        + order_by
+        + " LIMIT ? OFFSET ?",
+        (session["user_id"], per_page, offset),
     )
     media = cursor.fetchall()
     conn.close()
-    return render_template("dashboard.html", media=media, current_sort=sort)
+    return render_template(
+        "dashboard.html",
+        media=media,
+        current_sort=sort,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        total_items=total_items,
+    )
 
 
 @app.route("/dashboard/set_sort", methods=["POST"])

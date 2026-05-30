@@ -240,6 +240,12 @@ class Config:
         """Get session timeout in minutes (default 10)."""
         return Config.get_int("SESSION_TIMEOUT_MINUTES", 10)
 
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def ITEMS_PER_PAGE() -> int:
+        """Get items per page for pagination (default 50)."""
+        return Config.get_int("ITEMS_PER_PAGE", 50)
+
 
 def is_google_oauth_enabled() -> bool:
     """Check if Google OAuth is configured."""

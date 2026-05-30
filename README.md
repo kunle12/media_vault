@@ -177,6 +177,7 @@ The following configuration options can be set via environment variables:
 | MAX_CONTENT_LENGTH_MB | 500 | Maximum upload size in MB (e.g., 500) |
 | DATABASE | videodb.sqlite | SQLite database file |
 | CACHE_TYPE | simple | Cache type (simple, redis) |
+| ITEMS_PER_PAGE | 50 | Number of files per page on dashboard |
 | EMAIL_PROVIDER | generic | Email provider (generic, aws_ses) |
 | APPLICATION_ROOT | / | URL path prefix for subpath hosting |
 | SERVER_NAME | (empty) | Server name for external URL generation |
