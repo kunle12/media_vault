@@ -142,7 +142,7 @@
                 uploadStatus.textContent = 'Upload complete!';
                 progressBar.style.width = '100%';
                 uploadPercent.textContent = '100%';
-                window.location.href = '/dashboard';
+                window.location.href = '{{ application_root }}/dashboard';
             } else {
                 uploadStatus.textContent = 'Upload failed. Please try again.';
                 progressBar.classList.add('bg-red-600');

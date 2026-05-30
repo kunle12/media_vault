@@ -93,6 +93,13 @@ app.register_blueprint(
 )
 
 
+@app.before_request
+def extend_session() -> None:
+    """Slide session expiry on each request for authenticated users."""
+    if "user_id" in session:
+        session.modified = True
+
+
 @app.after_request
 def add_security_headers(response: Response) -> Response:
     """Add Content-Security-Policy and other security headers."""

@@ -155,14 +155,11 @@
                 const response = await fetch('{{ application_root }}/auth/session-status');
                 const data = await response.json();
 
-                if (!data.authenticated && data.expired && !sessionWarningShown) {
-                    showSessionExpiredModal();
-                    return;
-                }
-
                 if (data.timeout_seconds) {
                     sessionTimeoutSeconds = data.timeout_seconds;
                 }
+
+                return data;
             } catch (err) {
                 console.error('Session check failed:', err);
             }
@@ -186,12 +183,19 @@
 
         function extendSession() {
             fetch('{{ application_root }}/auth/refresh-session', { method: 'POST' })
-                .then(() => {
+                .then(response => {
+                    if (!response.ok) {
+                        showSessionExpiredModal();
+                        return;
+                    }
                     document.getElementById('sessionWarningModal').classList.add('hidden');
                     sessionWarningShown = false;
                     startSessionMonitor();
                 })
-                .catch(err => console.error('Session refresh failed:', err));
+                .catch(err => {
+                    console.error('Session refresh failed:', err);
+                    showSessionExpiredModal();
+                });
         }
 
         function showSessionExpiredModal() {
@@ -212,6 +216,16 @@
             if (sessionCheckInterval) clearInterval(sessionCheckInterval);
 
             let elapsedSeconds = 0;
+
+            function resetElapsed() {
+                elapsedSeconds = 0;
+            }
+
+            document.addEventListener('mousedown', resetElapsed, { passive: true });
+            document.addEventListener('keydown', resetElapsed, { passive: true });
+            document.addEventListener('touchstart', resetElapsed, { passive: true });
+            document.addEventListener('scroll', resetElapsed, { passive: true });
+
             sessionCheckInterval = setInterval(async () => {
                 const anyMediaPlaying = Array.from(document.querySelectorAll('video, audio')).some(
                     el => el.duration > 0 && !el.paused && !el.ended
@@ -233,7 +247,11 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            checkSessionStatus().then(() => startSessionMonitor());
+            checkSessionStatus().then(data => {
+                if (data && data.authenticated) {
+                    startSessionMonitor();
+                }
+            });
         });
     </script>
 </body>

@@ -347,7 +347,6 @@ def verify_code() -> Any:
     user_id = ensure_user_exists(email)
     session["user_id"] = user_id
     session["email"] = email
-    session["has_logged_in"] = True
     session.permanent = True
 
     return jsonify({"success": True, "message": "Login successful"})
@@ -380,18 +379,11 @@ def session_status() -> Any:
         return jsonify(
             {
                 "authenticated": True,
-                "expired": False,
                 "timeout_seconds": session_timeout,
             }
         )
 
-    was_logged_in = session.get("has_logged_in", False)
-    return jsonify(
-        {
-            "authenticated": False,
-            "expired": was_logged_in,
-        }
-    )
+    return jsonify({"authenticated": False})
 
 
 @auth_bp.route("/auth/refresh-session", methods=["POST"])
@@ -500,7 +492,6 @@ def google_callback() -> Any:
     user_id = ensure_user_exists(email)
     session["user_id"] = user_id
     session["email"] = email
-    session["has_logged_in"] = True
     session.permanent = True
     session.pop("oauth_state", None)
 
