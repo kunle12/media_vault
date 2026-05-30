@@ -21,8 +21,9 @@
             Your browser does not support the audio tag.
         </audio>
         {% else %}
-        <video controls class="w-full max-h-96 rounded" preload="metadata">
-            <source src="{{ url_for('play_media', media_id=media.id) }}" type="video/{{ ext }}">
+        {% set video_types = {'mp4': 'video/mp4', 'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'wmv': 'video/x-ms-wmv', 'flv': 'video/x-flv', 'webm': 'video/webm'} %}
+        <video controls class="w-full max-h-96 rounded" preload="metadata" playsinline>
+            <source src="{{ url_for('play_media', media_id=media.id) }}#t=0.1" type="{{ video_types.get(ext, 'video/' + ext) }}">
             Your browser does not support the video tag.
         </video>
         {% endif %}
