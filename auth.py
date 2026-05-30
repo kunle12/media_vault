@@ -172,7 +172,7 @@ def send_email(to_email: str, code: str) -> bool:
     from_email = Config.FROM_EMAIL()
 
     if not smtp_user or not smtp_password:
-        logger.debug(f"Email debug mode: code {code} for {to_email}")
+        logger.info(f"Email debug mode: code {code} for {to_email}")
         return True
 
     if email_provider == "aws_ses":
