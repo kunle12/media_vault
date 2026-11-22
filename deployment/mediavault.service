@@ -1,7 +1,7 @@
 [Unit]
 Description=MediaVault Application
-After=network.target
-RequiresMountsFor=/media/nas
+After=network.target media-nas.automount
+Requires=media-nas.automount
 
 [Service]
 Type=notify
@@ -10,6 +10,10 @@ Group=www-data
 WorkingDirectory=/srv/media_vault
 EnvironmentFile=/srv/media_vault/.env.local
 
+# Access triggers the automount. If the USB disk is absent, the directory
+# stays on the root filesystem and the service refuses to start, so it can
+# never create an empty database there.
+ExecStartPre=/bin/sh -c 'test -d /media/nas/Media/vault || { echo "NAS vault directory is unavailable; is /media/nas mounted?" >&2; exit 1; }'
 ExecStart=/bin/bash -c "source /srv/media_vault/.venv/bin/activate && gunicorn --bind 127.0.0.1:5050 --workers 1 --timeout 120 app:app"
 ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed

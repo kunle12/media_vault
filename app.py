@@ -194,6 +194,24 @@ def init_db() -> None:
         conn.close()
 
 
+def require_mount_point() -> None:
+    """Refuse to create data on the root disk when the NAS is absent.
+
+    Touching the path first lets systemd's automount bring the USB disk up on
+    demand; the ismount check then proves the open succeeded. Production sets
+    ``REQUIRE_MOUNT_POINT=/media/nas``. Development leaves it empty.
+    """
+    required = Config.REQUIRE_MOUNT_POINT()
+    if not required:
+        return
+    try:
+        os.stat(required)
+    except OSError as exc:
+        raise RuntimeError(f"required mount {required} is unavailable") from exc
+    if not os.path.ismount(required):
+        raise RuntimeError(f"required mount {required} is not mounted")
+
+
 def ensure_upload_folder() -> None:
     """Create upload folder if it doesn't exist."""
     if not is_s3_enabled():
@@ -842,6 +860,7 @@ def server_error(_error: Any) -> tuple[str, int]:
     ), 500
 
 
+require_mount_point()
 ensure_upload_folder()
 init_db()
 

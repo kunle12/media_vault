@@ -166,6 +166,16 @@ class Config:
         """Get items per page for pagination (default 50)."""
         return Config.get_int("ITEMS_PER_PAGE", 50)
 
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def REQUIRE_MOUNT_POINT() -> str:
+        """Optional path that must be a real mount before opening storage.
+
+        Production sets this to ``/media/nas``. The access also triggers the
+        systemd automount, so a cold start mounts the USB disk on demand.
+        """
+        return Config.get("REQUIRE_MOUNT_POINT")
+
 
 def is_s3_enabled() -> bool:
     """Check if S3 storage is configured."""

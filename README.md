@@ -60,9 +60,21 @@ curl -H 'X-Auth-User: you@example.com' http://127.0.0.1:5050/dashboard
 ### Production on `lion`
 
 The app lives at `/srv/media_vault`, runs as `www-data` on
-`127.0.0.1:5050`, and reads `/srv/media_vault/.env.local`. The unit declares
-`RequiresMountsFor=/media/nas`, so it will not start and create an empty
-database on the root disk when the USB disk is missing.
+`127.0.0.1:5050`, and reads `/srv/media_vault/.env.local`.
+
+The NAS is a USB disk managed as a systemd **automount**:
+
+```fstab
+UUID=<disk-uuid> /media/nas ext4 noatime,nofail,x-systemd.automount,x-systemd.idle-timeout=30min,x-systemd.device-timeout=15s 0 2
+```
+
+The filesystem is mounted on first access and unmounted after 30 minutes
+idle, which lets the enclosure spin the disk down when nothing else touches
+it. `mediavault.service` requires `media-nas.automount`, touches
+`/media/nas/Media/vault` in `ExecStartPre`, and the app checks
+`REQUIRE_MOUNT_POINT` before opening SQLite. If the disk is absent the
+service refuses to start rather than creating an empty database on the root
+disk.
 
 ```bash
 sudo APP_DIR=/srv/media_vault ./deployment/deploy.sh

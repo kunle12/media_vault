@@ -45,6 +45,12 @@ media(id, filename, original_filename, storage_key, file_size,
 `storage_key` is an absolute local path or an object key. Local uploads live
 in `videos/`, `audios/` and `images/` beneath `UPLOAD_FOLDER`.
 
+Production storage is on `/media/nas`, a systemd automount with a 30-minute
+idle timeout. `mediavault.service` requires `media-nas.automount`, and
+`require_mount_point()` triggers the mount then refuses to run unless
+`REQUIRE_MOUNT_POINT` is a real mount. Never remove that guard: without it a
+missing USB disk would create a fresh database on the root filesystem.
+
 ## Adding a route
 
 ```python
