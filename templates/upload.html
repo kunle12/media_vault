@@ -1,165 +1,187 @@
-<!-- templates/upload.html -->
 {% extends "layout.html" %}
+{% block title %}Upload · Media Vault{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto">
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">Upload Media</h1>
-
-    <div class="bg-white p-6 rounded-lg shadow">
-        <form id="uploadForm" method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
-            <div class="mb-6">
-                <label for="files" class="block text-sm font-medium text-gray-700 mb-2">Select media files</label>
-                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                    <div class="space-y-1 text-center">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                        <div class="flex text-sm text-gray-600">
-                            <label for="files" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                                <span>Upload files</span>
-                                <input id="files" name="files" type="file" accept=".mp4,.avi,.mov,.wmv,.flv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic" multiple class="sr-only" required>
-                            </label>
-                            <p class="pl-1">or drag and drop</p>
-                        </div>
-                        <p class="text-xs text-gray-500">
-                            MP4, AVI, MOV, MKV, WMV, FLV, WEBM, MP3, WAV, OGG, PNG, JPG, JPEG, GIF, WEBP, BMP, HEIC up to {{ max_size_mb }}MB each
-                        </p>
-                    </div>
-                </div>
-                <div class="mt-2 hidden" id="files-selected">
-                    <p class="text-sm text-gray-600">Selected files:</p>
-                    <ul id="file-list" class="text-sm text-gray-700 mt-1"></ul>
-                </div>
-            </div>
-
-            <!-- Upload Progress -->
-            <div id="uploadProgress" class="hidden mb-6">
-                <p class="text-sm text-gray-600 mb-1" id="uploadStatus">Uploading...</p>
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-                </div>
-                <p class="text-xs text-gray-400 mt-1" id="uploadPercent">0%</p>
-            </div>
-
-            <div class="flex justify-end">
-                <button type="submit" id="submitBtn" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    Upload Files
-                </button>
-            </div>
-        </form>
-    </div>
+<div class="uploadhead">
+	<div class="eyebrow">Upload · deck 02</div>
+	<h1>Add to the vault</h1>
+	<p class="sub">Files are stored on the NAS at <b>{{ storage_path }}</b></p>
 </div>
 
+<form id="uploadForm" method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+	<div class="uploadgrid">
+		<div class="drop" id="drop">
+			<div class="glyph">
+				<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+					<path d="M12 16V4m0 0 4.5 4.5M12 4 7.5 8.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+				</svg>
+			</div>
+			<h2>Drop files here</h2>
+			<p>or browse from this device</p>
+			<label class="bigbtn" for="files">Choose files</label>
+			<input id="files" name="files" type="file" multiple required class="sr-only"
+				accept=".mp4,.avi,.mov,.wmv,.flv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic" />
+		</div>
+
+		<aside class="rules">
+			<h2>Upload rules</h2>
+			<div class="rule"><span>Video</span><b>mp4 · mov · avi<br>webm · wmv · flv</b></div>
+			<div class="rule"><span>Audio</span><b>mp3 · wav · ogg</b></div>
+			<div class="rule"><span>Image</span><b>png · jpg · gif<br>webp · bmp · heic</b></div>
+			<div class="rule"><span>Maximum</span><b>{{ max_size_mb }} MB each</b></div>
+			<div class="rule"><span>Destination</span><b>NAS vault</b></div>
+		</aside>
+	</div>
+
+	<div class="selected" id="selected" hidden>
+		<span>Selected: <b id="selectedCount" style="color: var(--ink)">0 files</b> · <span id="selectedSize">0 B</span></span>
+		<span id="selectedNames"></span>
+	</div>
+
+	<div class="progress" id="progress" hidden>
+		<div class="pmeta" style="margin-top: 0">
+			<span>Uploading <b id="currentFile">—</b></span>
+			<span><b id="percent">0%</b></span>
+		</div>
+		<div class="pbar"><i id="progressBar"></i></div>
+		<div class="pmeta"><span id="sentBytes">0 B</span><span id="uploadState">preparing…</span></div>
+	</div>
+
+	<div class="uploadfoot">
+		<div class="notice">
+			<span class="led"></span>
+			<span>Destination ready · {{ storage_path }}
+				{% if disk_free %} · <b>{{ disk_free|filesize }} free</b>{% endif %}
+			</span>
+		</div>
+		<button type="submit" id="submitBtn" class="bigbtn">Upload files</button>
+	</div>
+</form>
+
 <script>
-    const fileInput = document.getElementById('files');
-    const dropZone = document.querySelector('.border-dashed');
-    const uploadForm = document.getElementById('uploadForm');
-    const submitBtn = document.getElementById('submitBtn');
-    const uploadProgress = document.getElementById('uploadProgress');
-    const progressBar = document.getElementById('progressBar');
-    const uploadStatus = document.getElementById('uploadStatus');
-    const uploadPercent = document.getElementById('uploadPercent');
-    let dragCounter = 0;
+	const form = document.getElementById('uploadForm');
+	const input = document.getElementById('files');
+	const drop = document.getElementById('drop');
+	const submitBtn = document.getElementById('submitBtn');
+	const progress = document.getElementById('progress');
+	const progressBar = document.getElementById('progressBar');
+	const percent = document.getElementById('percent');
+	const currentFile = document.getElementById('currentFile');
+	const selected = document.getElementById('selected');
+	const selectedCount = document.getElementById('selectedCount');
+	const selectedSize = document.getElementById('selectedSize');
+	const selectedNames = document.getElementById('selectedNames');
+	const sentBytes = document.getElementById('sentBytes');
+	const uploadState = document.getElementById('uploadState');
+	let dragDepth = 0;
 
-    function updateFileList(files) {
-        const fileList = document.getElementById('file-list');
-        fileList.innerHTML = '';
-        if (files.length > 0) {
-            document.getElementById('files-selected').classList.remove('hidden');
-            for (let i = 0; i < files.length; i++) {
-                const li = document.createElement('li');
-                li.textContent = files[i].name;
-                fileList.appendChild(li);
-            }
-        } else {
-            document.getElementById('files-selected').classList.add('hidden');
-        }
-    }
+	function human(bytes) {
+		if (!bytes) return '0 B';
+		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+		let n = bytes;
+		let i = 0;
+		while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+		return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + units[i];
+	}
 
-    fileInput.addEventListener('change', function(e) {
-        updateFileList(e.target.files);
-    });
+	function chosen() {
+		return Array.from(input.files || []);
+	}
 
-    dropZone.addEventListener('dragenter', function(e) {
-        e.preventDefault();
-        dragCounter++;
-        if (dragCounter === 1) {
-            dropZone.classList.add('border-blue-500', 'bg-blue-50');
-        }
-    });
+	function updateSelected() {
+		const files = chosen();
+		if (!files.length) {
+			selected.hidden = true;
+			return;
+		}
+		const total = files.reduce((sum, file) => sum + file.size, 0);
+		selected.hidden = false;
+		selectedCount.textContent = files.length + (files.length === 1 ? ' file' : ' files');
+		selectedSize.textContent = human(total);
+		const names = files.map((file) => file.name);
+		selectedNames.textContent = names.slice(0, 3).join(' · ') + (names.length > 3 ? ' · …' : '');
+	}
 
-    dropZone.addEventListener('dragover', function(e) {
-        e.preventDefault();
-    });
+	input.addEventListener('change', updateSelected);
 
-    dropZone.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        dragCounter--;
-        if (dragCounter === 0) {
-            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
-        }
-    });
+	drop.addEventListener('dragenter', (event) => {
+		event.preventDefault();
+		dragDepth++;
+		drop.classList.add('over');
+	});
+	drop.addEventListener('dragover', (event) => event.preventDefault());
+	drop.addEventListener('dragleave', (event) => {
+		event.preventDefault();
+		dragDepth = Math.max(0, dragDepth - 1);
+		if (dragDepth === 0) drop.classList.remove('over');
+	});
+	drop.addEventListener('drop', (event) => {
+		event.preventDefault();
+		dragDepth = 0;
+		drop.classList.remove('over');
+		const dropped = event.dataTransfer && event.dataTransfer.files;
+		if (!dropped || !dropped.length) return;
+		const transfer = new DataTransfer();
+		for (const file of dropped) transfer.items.add(file);
+		input.files = transfer.files;
+		updateSelected();
+	});
 
-    dropZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        dragCounter = 0;
-        dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+	form.addEventListener('submit', (event) => {
+		event.preventDefault();
+		const files = chosen();
+		if (!files.length) {
+			window.mvNotice('No files selected', 'Choose at least one video, audio file or image.');
+			return;
+		}
 
-        const droppedFiles = e.dataTransfer.files;
-        if (droppedFiles.length === 0) return;
+		submitBtn.disabled = true;
+		submitBtn.textContent = 'Uploading…';
+		progress.hidden = false;
+		progressBar.style.width = '0%';
+		percent.textContent = '0%';
+		sentBytes.textContent = '0 B';
+		currentFile.textContent = files.length === 1 ? files[0].name : files.length + ' files';
+		uploadState.textContent = 'uploading…';
 
-        const dt = new DataTransfer();
-        for (const file of droppedFiles) {
-            dt.items.add(file);
-        }
-        fileInput.files = dt.files;
-        updateFileList(droppedFiles);
-    });
+		const data = new FormData(form);
+		const xhr = new XMLHttpRequest();
 
-    uploadForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        if (!fileInput.files || fileInput.files.length === 0) return;
+		xhr.upload.addEventListener('progress', (event) => {
+			if (!event.lengthComputable) return;
+			const pct = Math.round((event.loaded / event.total) * 100);
+			progressBar.style.width = pct + '%';
+			percent.textContent = pct + '%';
+			sentBytes.textContent = human(event.loaded) + ' of ' + human(event.total);
+		});
 
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Uploading...';
-        uploadProgress.classList.remove('hidden');
-        progressBar.style.width = '0%';
-        uploadPercent.textContent = '0%';
-        uploadStatus.textContent = 'Uploading files...';
+		xhr.addEventListener('load', () => {
+			if (xhr.status === 200 || (xhr.status >= 300 && xhr.status < 400 && xhr.responseURL.includes('/dashboard'))) {
+				uploadState.textContent = 'complete';
+				progressBar.style.width = '100%';
+				percent.textContent = '100%';
+				window.location.assign('{{ url_for("dashboard") }}');
+				return;
+			}
+			submitBtn.disabled = false;
+			submitBtn.textContent = 'Upload files';
+			progress.hidden = true;
+			if (xhr.status === 413) {
+				window.mvNotice('Upload too large', 'Each upload is limited to {{ max_size_mb }} MB.');
+			} else {
+				window.mvNotice('Upload failed', 'The vault returned an error. Check the file type and size, then try again.');
+			}
+		});
 
-        const formData = new FormData(uploadForm);
-        const xhr = new XMLHttpRequest();
+		xhr.addEventListener('error', () => {
+			submitBtn.disabled = false;
+			submitBtn.textContent = 'Upload files';
+			progress.hidden = true;
+			window.mvNotice('Network error', 'The upload did not reach the vault. Check the connection and try again.');
+		});
 
-        xhr.upload.onprogress = function(event) {
-            if (event.lengthComputable) {
-                const percent = Math.round((event.loaded / event.total) * 100);
-                progressBar.style.width = percent + '%';
-                uploadPercent.textContent = percent + '%';
-            }
-        };
-
-        xhr.onload = function() {
-            if (xhr.status === 200) {
-                uploadStatus.textContent = 'Upload complete!';
-                progressBar.style.width = '100%';
-                uploadPercent.textContent = '100%';
-                window.location.href = '{{ application_root }}/dashboard';
-            } else {
-                uploadStatus.textContent = 'Upload failed. Please try again.';
-                progressBar.classList.add('bg-red-600');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Upload Files';
-            }
-        };
-
-        xhr.onerror = function() {
-            uploadStatus.textContent = 'Network error. Please try again.';
-            progressBar.classList.add('bg-red-600');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Upload Files';
-        };
-
-        xhr.open('POST', uploadForm.action, true);
-        xhr.send(formData);
-    });
+		xhr.open('POST', form.action, true);
+		xhr.send(data);
+	});
 </script>
 {% endblock %}
+{% block footmeta %}destination · {{ storage_path }}{% endblock %}

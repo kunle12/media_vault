@@ -9,7 +9,7 @@ load_dotenv(dotenv_path=".env.local")
 
 
 class Config:
-    """Central configuration class with cached environment variable access."""
+    """Class with cached environment variable access."""
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -33,11 +33,8 @@ class Config:
     @staticmethod
     @lru_cache(maxsize=None)
     def SECRET_KEY() -> str:
-        """Get Flask secret key."""
+        """Get Flask secret key, used only to sign the sort-preference cookie."""
         return Config.get("SECRET_KEY", os.urandom(32).hex())
-
-    WTF_CSRF_ENABLED = True
-    WTF_CSRF_TIME_LIMIT = None
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -69,19 +66,12 @@ class Config:
         """Get server name for external URL generation."""
         return Config.get("SERVER_NAME", "")
 
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def CACHE_TYPE() -> str:
-        """Get cache type."""
-        return Config.get("CACHE_TYPE", "simple")
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def CACHE_REDIS_URL() -> str:
-        """Get Redis cache URL."""
-        return Config.get("CACHE_REDIS_URL", "redis://localhost:6379/0")
-
-    CACHE_DEFAULT_TIMEOUT = 300
+    #: Header set by the guard through nginx. The app never reads identity
+    #: from a cookie; a request without this header is refused at the edge.
+    IDENTITY_HEADER = "X-Auth-User"
+    GROUPS_HEADER = "X-Auth-Groups"
+    #: Only accept the identity header from the local reverse proxy.
+    TRUSTED_PROXY_ADDRS = frozenset({"127.0.0.1", "::1"})
 
     ALLOWED_EXTENSIONS = {
         "mp4",
@@ -101,60 +91,6 @@ class Config:
         "bmp",
         "heic",
     }
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def GOOGLE_CLIENT_ID() -> str:
-        """Get Google OAuth client ID."""
-        return Config.get("GOOGLE_CLIENT_ID")
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def GOOGLE_CLIENT_SECRET() -> str:
-        """Get Google OAuth client secret."""
-        return Config.get("GOOGLE_CLIENT_SECRET")
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def GOOGLE_OAUTH_ENABLED() -> bool:
-        """Check if Google OAuth is enabled."""
-        return bool(Config.GOOGLE_CLIENT_ID() and Config.GOOGLE_CLIENT_SECRET())
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def EMAIL_PROVIDER() -> str:
-        """Get email provider."""
-        return Config.get("EMAIL_PROVIDER", "generic").lower()
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def SMTP_HOST() -> str:
-        """Get SMTP host."""
-        return Config.get("SMTP_HOST")
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def SMTP_PORT() -> int:
-        """Get SMTP port."""
-        return Config.get_int("SMTP_PORT", 587)
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def SMTP_USER() -> str:
-        """Get SMTP user."""
-        return Config.get("SMTP_USER")
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def SMTP_PASSWORD() -> str:
-        """Get SMTP password."""
-        return Config.get("SMTP_PASSWORD")
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def FROM_EMAIL() -> str:
-        """Get from email."""
-        return Config.get("FROM_EMAIL") or Config.get("SMTP_USER")
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -207,7 +143,7 @@ class Config:
     @staticmethod
     @lru_cache(maxsize=None)
     def AZURE_CONTAINER() -> str:
-        """Get Azure blob container name."""
+        """Get Azure container name."""
         return Config.get("AZURE_CONTAINER")
 
     @staticmethod
@@ -226,30 +162,9 @@ class Config:
 
     @staticmethod
     @lru_cache(maxsize=None)
-    def ALLOWED_EMAILS() -> str:
-        """Get allowed emails."""
-        return Config.get("ALLOWED_EMAILS")
-
-    CODE_EXPIRY_SECONDS = 300
-    MAX_CODE_ATTEMPTS = 5
-    RATE_LIMIT_SECONDS = 60
-
-    @staticmethod
-    @lru_cache(maxsize=None)
-    def SESSION_TIMEOUT_MINUTES() -> int:
-        """Get session timeout in minutes (default 10)."""
-        return Config.get_int("SESSION_TIMEOUT_MINUTES", 10)
-
-    @staticmethod
-    @lru_cache(maxsize=None)
     def ITEMS_PER_PAGE() -> int:
         """Get items per page for pagination (default 50)."""
         return Config.get_int("ITEMS_PER_PAGE", 50)
-
-
-def is_google_oauth_enabled() -> bool:
-    """Check if Google OAuth is configured."""
-    return Config.GOOGLE_OAUTH_ENABLED()
 
 
 def is_s3_enabled() -> bool:
@@ -262,37 +177,9 @@ def is_azure_enabled() -> bool:
     return Config.AZURE_ENABLED()
 
 
-def get_google_client_id() -> str:
-    """Get Google OAuth client ID."""
-    return Config.GOOGLE_CLIENT_ID()
-
-
-def get_google_client_secret() -> str:
-    """Get Google OAuth client secret."""
-    return Config.GOOGLE_CLIENT_SECRET()
-
-
 def get_aws_region() -> str:
     """Get AWS region."""
     return Config.AWS_REGION() or Config.AWS_DEFAULT_REGION()
-
-
-def get_smtp_config() -> dict:
-    """Get SMTP configuration."""
-    return {
-        "host": Config.SMTP_HOST(),
-        "port": Config.SMTP_PORT(),
-        "user": Config.SMTP_USER(),
-        "password": Config.SMTP_PASSWORD(),
-        "from_email": Config.FROM_EMAIL(),
-        "provider": Config.EMAIL_PROVIDER(),
-    }
-
-
-def get_allowed_emails() -> set:
-    """Get allowed emails as a set."""
-    emails = Config.ALLOWED_EMAILS()
-    return set(emails.lower().split()) if emails else set()
 
 
 def get_application_root() -> str:

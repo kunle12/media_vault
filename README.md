@@ -1,248 +1,164 @@
-# MediaVault
+# Media Vault
 
-A Flask-based personal multimedia management application that allows users to upload, view, and manage their video, audio, and image collection.
+A per-user media library for the Kunle Workspace. It stores video, audio and
+images on the NAS, streams them with HTTP range requests, and signs users in
+through the workspace guard instead of keeping its own email login.
 
-## Features
+The UI follows the workspace “media deck” language: Saira/IBM Plex Mono,
+the bridge (dark) and dawn (light) palettes, and the same `guard.theme`
+preference as the console.
 
-- **Passwordless Authentication**: Email-based verification code login
-- **Media Upload**: Upload media files (video: mp4, avi, mov, wmv, flv, webm; audio: mp3, wav, ogg; image: png, jpg, jpeg, gif, webp, bmp, heic) up to 500MB (configurable via MAX_CONTENT_LENGTH_MB)
-- **Media Management**: View, stream, download, and delete your uploaded files
-- **Dashboard**: Personal dashboard showing all your uploaded media
-- **Non-ASCII Filename Support**: Full support for filenames with non-ASCII characters (Chinese, Japanese, Russian, etc.)
-- **S3 Storage**: Optional AWS S3 (or compatible) storage backend
-- **Security**: Time-sensitive verification codes (5 min), rate limiting, session-based auth
+## What it does
 
-## Requirements
+- Lists the signed-in user's media with sorting, filtering and pagination
+- Uploads multiple files with drag-and-drop and live progress
+- Streams video/audio with range requests and inline images
+- Downloads files with RFC 5987 non-ASCII filenames
+- Deletes files through a themed confirmation dialog
+- Stores files locally (default) or on S3/Azure Blob
+- Exposes `/mediavault/healthz` for the operator
 
-- Python 3.8+
-- SQLite3
+It does **not** have a local password, email-code, or Google login. Identity
+comes from the guard through nginx.
 
-## Installation
+## Identity contract
 
-1. Clone the repository and navigate to the project directory:
-   ```bash
-   cd MediaVault
-   ```
+nginx runs the guard's `auth_request` and sets these headers on every request
+it proxies to Media Vault:
 
-2. Create a virtual environment (optional but recommended):
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
+| Header | Meaning |
+|---|---|
+| `X-Auth-User` | verified email address |
+| `X-Auth-Groups` | comma-separated guard groups |
+| `X-Auth-Sid` | session id (not used by the app) |
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+The app accepts the identity header **only from loopback** (`127.0.0.1` /
+`::1`) and refuses a request without it with a themed `401`. Never expose
+gunicorn on a public interface.
 
-4. Configure allowed emails by setting the `ALLOWED_EMAILS` environment variable (whitespace-separated emails):
-   ```
-   export ALLOWED_EMAILS="user@example.com admin@example.com your-email@domain.com"
-   ```
+The app maps the email to its local `users` row, creating one on first sight.
+Existing rows are reused by email, so media ownership survives the migration
+from the old login.
 
-5. (Optional) Create an `.env` file to override defaults:
-   ```env
-   SECRET_KEY=your_secret_key_here
-   UPLOAD_FOLDER=uploads
-   DATABASE=videodb.sqlite
-   ```
+## Install
 
-6. (Optional) Configure email sending:
-   ```env
-   # Email provider: generic, aws_ses
-   EMAIL_PROVIDER=aws_ses
-
-   # AWS SES (if using AWS SES)
-   AWS_REGION=us-east-1
-   SMTP_USER=AKIxxxxxxxxxxxx
-   SMTP_PASSWORD=BPxxxxxxxxxxxxxxxxxxxxx
-   FROM_EMAIL=noreply@yourdomain.com
-
-   # Or Gmail/Other SMTP
-   # SMTP_HOST=smtp.gmail.com
-   # SMTP_PORT=587
-   # SMTP_USER=your@gmail.com
-   # SMTP_PASSWORD=your_app_password
-   ```
-
-7. Run the application - database and upload folder are created automatically:
-   ```bash
-   python app.py
-   ```
-
-## Running the Application
+### Development
 
 ```bash
-python app.py
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+cp .env.example .env.local      # edit paths if needed
+.venv/bin/python app.py         # http://127.0.0.1:5050
 ```
 
-The application will start on `http://localhost:5050`. The database and uploads folder are created automatically on first run.
+Flask has no local login, so send the header the guard would send:
 
-## Authentication
-
-MediaVault uses **passwordless email authentication**:
-
-1. Enter your email on the sign-in modal
-2. If your email is in the allowed list, a 6-character verification code is sent
-3. Enter the code (valid for 5 minutes, 5 retry attempts max)
-4. Session is created and you can access the dashboard
-
-### Allowed Emails
-
-Set the `ALLOWED_EMAILS` environment variable with whitespace-separated email addresses to control who can access the application.
-
-### Email Configuration
-
-The app supports multiple email providers:
-
-| Provider | Setup |
-|----------|-------|
-| **Debug (default)** | No config needed - codes printed to console |
-| **AWS SES** | Set `EMAIL_PROVIDER=aws_ses`, `AWS_REGION`, SMTP credentials |
-| **Gmail** | Set `SMTP_HOST=smtp.gmail.com`, use App Password |
-| **Other SMTP** | Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` |
-
-## Project Structure
-
+```bash
+curl -H 'X-Auth-User: you@example.com' http://127.0.0.1:5050/dashboard
 ```
-MediaVault/
-├── app.py                   # Main application file
-├── auth.py                  # Authentication blueprint
-├── storage.py               # Storage backend (local/S3)
-├── requirements.txt         # Python dependencies
-├── README.md                # Documentation
-├── Dockerfile               # Docker configuration
-├── docker-compose.yml       # Docker Compose configuration
-├── videodb.sqlite          # SQLite database (auto-created)
-├── templates/              # HTML templates
-│   ├── layout.html         # Base template
-│   ├── index.html          # Home page
-│   ├── dashboard.html      # User dashboard
-│   ├── upload.html         # Media upload page
-│   ├── media_view.html     # Media view page
-│   ├── auth_modals.html    # Authentication modals
-│   └── auth_trigger.html   # Auth trigger page
-└── uploads/                # Media storage directory (auto-created)
+
+### Production on `lion`
+
+The app lives at `/srv/media_vault`, runs as `www-data` on
+`127.0.0.1:5050`, and reads `/srv/media_vault/.env.local`. The unit declares
+`RequiresMountsFor=/media/nas`, so it will not start and create an empty
+database on the root disk when the USB disk is missing.
+
+```bash
+sudo APP_DIR=/srv/media_vault ./deployment/deploy.sh
 ```
+
+nginx owns the public route:
+
+- `location = /mediavault` → `308 /mediavault/`
+- `location /mediavault/` → `auth_request /_authz`, forward
+  `X-Auth-User` / `X-Auth-Groups`, strip `__Host-sso`, proxy to
+  `127.0.0.1:5050`
+- `client_max_body_size 500M` and a longer read timeout for uploads
+
+The guard app registry must contain `mediavault` with `path_prefix
+/mediavault` and the `users` group.
+
+## Configuration
+
+Environment variables are read from `.env.local` (see `.env.example`).
+
+| Variable | Default | Description |
+|---|---|---|
+| `SECRET_KEY` | random | Flask signing key; only used for the optional sort-preference cookie |
+| `APPLICATION_ROOT` | `/` | URL prefix; production uses `/mediavault` |
+| `SERVER_NAME` | empty | Optional external host |
+| `UPLOAD_FOLDER` | `uploads` | Local storage directory |
+| `DATABASE` | `videodb.sqlite` | SQLite database path |
+| `MAX_CONTENT_LENGTH_MB` | `500` | Per-request upload limit |
+| `ITEMS_PER_PAGE` | `50` | Library page size |
+| `S3_BUCKET` | empty | Enables S3 storage |
+| `S3_PREFIX` | empty | S3 key prefix |
+| `S3_ENDPOINT` | empty | Custom S3 endpoint |
+| `AWS_REGION` | `us-east-1` | S3 region |
+| `AZURE_STORAGE_ACCOUNT` | empty | Enables Azure Blob storage |
+| `AZURE_STORAGE_KEY` | empty | Azure account key |
+| `AZURE_CONTAINER` | `media` | Azure container |
+| `AZURE_CONNECTION_STRING` | empty | Alternative Azure credential |
 
 ## Routes
 
 | Route | Method | Description |
-|-------|--------|-------------|
-| `/` | GET | Home page |
-| `/auth/request-code` | POST | Request verification code |
-| `/auth/verify-code` | POST | Verify code and login |
-| `/auth/logout` | POST | User logout |
-| `/auth/status` | GET | Check auth status |
-| `/dashboard` | GET | User dashboard (protected) |
-| `/upload` | GET, POST | Media upload (protected) |
-| `/media/<id>` | GET | View media (protected) |
-| `/media/<id>/play` | GET | Stream media for playback (protected) |
-| `/media/<id>/download` | GET | Download media (protected) |
-| `/media/<id>/delete` | POST | Delete media (protected) |
+|---|---|---|
+| `/` | GET | Redirects to the library |
+| `/dashboard` | GET | Library, sorting and pagination |
+| `/upload` | GET, POST | Upload form and processing |
+| `/media/<id>` | GET | Player and file details |
+| `/media/<id>/play` | GET | Stream with range requests |
+| `/media/<id>/download` | GET | Download |
+| `/media/<id>/delete` | POST | Delete file and row |
+| `/healthz` | GET | Database and storage check |
 
-## Database Schema
+All routes except `/healthz` and `/static/` require a trusted identity header.
 
-### users
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary key |
-| email | TEXT | Unique email |
-| created_at | TIMESTAMP | First login timestamp |
+## Data model
 
-### media
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary key |
-| filename | TEXT | Unique stored filename |
-| original_filename | TEXT | Original file name |
-| storage_key | TEXT | Storage key (local path or S3 key) |
-| file_size | INTEGER | File size in bytes |
-| uploaded_at | TIMESTAMP | Upload timestamp |
-| user_id | INTEGER | Foreign key to users |
+```text
+users(id, email UNIQUE, created_at)
+media(id, filename, original_filename, storage_key, file_size,
+      uploaded_at, user_id → users.id)
+```
 
-### Database Indexes
-- `idx_media_user_id` on `media(user_id)`
-- `idx_users_email` on `users(email)`
+`storage_key` is an absolute path for local storage or an object key for
+S3/Azure. Local files are grouped into `videos/`, `audios/` and `images/`.
 
-## Configuration
+## Supported formats
 
-The following configuration options can be set via environment variables:
+- Video: mp4, avi, mov, wmv, flv, webm
+- Audio: mp3, wav, ogg
+- Image: png, jpg, jpeg, gif, webp, bmp, heic
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| SECRET_KEY | random 32-byte hex | Flask secret key (auto-generated) |
-| WTF_CSRF_ENABLED | True | Enable CSRF protection |
-| UPLOAD_FOLDER | uploads | Directory for storing media |
-| MAX_CONTENT_LENGTH_MB | 500 | Maximum upload size in MB (e.g., 500) |
-| DATABASE | videodb.sqlite | SQLite database file |
-| CACHE_TYPE | simple | Cache type (simple, redis) |
-| ITEMS_PER_PAGE | 50 | Number of files per page on dashboard |
-| EMAIL_PROVIDER | generic | Email provider (generic, aws_ses) |
-| APPLICATION_ROOT | / | URL path prefix for subpath hosting |
-| SERVER_NAME | (empty) | Server name for external URL generation |
+## Theme
 
-### Email/SMTP Configuration
+The header toggle cycles `bridge` and `dawn` and writes the shared
+`guard.theme` key. The app also listens for the guard's cross-tab logout
+event through `/guard-logout.js`; signing out of the console redirects open
+vault tabs to `/login`.
 
-| Variable | Description |
-|----------|-------------|
-| EMAIL_PROVIDER | Provider type: generic, aws_ses |
-| AWS_REGION | AWS region for SES (e.g., us-east-1) |
-| SMTP_HOST | SMTP server hostname |
-| SMTP_PORT | SMTP server port (default: 587) |
-| SMTP_USER | SMTP username |
-| SMTP_PASSWORD | SMTP password |
-| FROM_EMAIL | Sender email address |
+## Tests
 
-### S3 Storage Configuration
+```bash
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
+```
 
-| Variable | Description |
-|----------|-------------|
-| S3_BUCKET | S3 bucket name (enables S3 storage) |
-| S3_PREFIX | S3 key prefix |
-| AWS_REGION | AWS region |
-| AWS_DEFAULT_REGION | AWS default region |
-| S3_ENDPOINT | Custom S3 endpoint (for MinIO, etc.) |
+The suite covers identity refusal, first-sight provisioning, per-user media
+isolation, uploads, range streaming, downloads, deletion, health checks and
+the themed error pages.
 
-### Azure Blob Storage Configuration
+## Known limitations
 
-| Variable | Description |
-|----------|-------------|
-| AZURE_STORAGE_ACCOUNT | Azure storage account name (enables Azure storage) |
-| AZURE_STORAGE_KEY | Azure storage account key |
-| AZURE_CONTAINER | Blob container name (default: media) |
-| AZURE_CONNECTION_STRING | Alternative to account/key - full connection string |
-
-### Non-ASCII Filename Support
-
-MediaVault properly handles filenames with non-ASCII characters (e.g., Chinese, Japanese, Russian).
-Filenames are encoded using RFC 5987 (`filename*=UTF-8''...`) in Content-Disposition headers
-to ensure browser compatibility for both streaming and download.
-
-## Allowed File Formats
-
-### Video
-- mp4
-- avi
-- mov
-- wmv
-- flv
-- webm
-
-### Audio
-- mp3
-- wav
-- ogg
-
-### Image
-- png
-- jpg
-- jpeg
-- gif
-- webp
-- bmp
-- heic
-
-## License
-
-MIT License
+- The app trusts `X-Auth-User` from loopback only. Any local process that can
+  reach port 5050 can impersonate a user; keep the service on `127.0.0.1`.
+- A media stream that is already open can outlive guard logout until the
+  request finishes. The guard session still blocks every new request.
+- S3 and Azure backends are supported but not exercised by the default
+  deployment.
+- The NAS is a single USB disk. `mediavault.service` refuses to start without
+  it, but backups are still the operator's responsibility.

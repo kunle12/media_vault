@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" data-theme="bridge">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta name="color-scheme" content="dark light" />
+	<title>{{ title }} · Media Vault</title>
+	<script>
+		try {
+			if (localStorage.getItem('guard.theme') === 'dawn') {
+				document.documentElement.dataset.theme = 'dawn';
+			}
+		} catch (e) {}
+	</script>
+	<link rel="stylesheet" href="{{ url_for('static', filename='mediavault.css') }}" />
+</head>
+<body>
+	<div class="error-wrap">
+		<div class="error-card">
+			<div class="code">{{ code }}</div>
+			<h1>{{ title }}</h1>
+			<p>{{ message }}</p>
+			{% if code == 401 %}
+				<a class="bigbtn" href="/login">Sign in</a>
+			{% else %}
+				<a class="bigbtn" href="/">Back to the workspace</a>
+			{% endif %}
+		</div>
+	</div>
+</body>
+</html>

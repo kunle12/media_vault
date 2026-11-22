@@ -1,55 +1,68 @@
-<!-- templates/media_view.html -->
 {% extends "layout.html" %}
+{% block title %}{{ media.original_filename }} · Media Vault{% endblock %}
 {% block content %}
-<div>
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-900 truncate">{{ media.original_filename }}</h1>
-        <div>
-            <a href="{{ url_for('dashboard') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50">
-                Back to Dashboard
-            </a>
-        </div>
-    </div>
+{% set ext = media.original_filename.split('.')[-1].lower() if '.' in media.original_filename else '' %}
+{% set is_video = ext in ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'] %}
+{% set is_audio = ext in ['mp3', 'wav', 'ogg'] %}
+{% set is_image = ext in ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic'] %}
 
-    <div class="bg-white p-6 rounded-lg shadow mb-6">
-        {% set ext = media.original_filename.split('.')[-1].lower() %}
-        {% if ext in ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic'] %}
-        <img src="{{ url_for('play_media', media_id=media.id) }}" class="max-w-full max-h-96 mx-auto" alt="{{ media.original_filename }}">
-        {% elif ext in ['mp3', 'wav', 'ogg'] %}
-        <audio controls class="w-full" preload="metadata">
-            {% if ext == 'mp3' %}<source src="{{ url_for('play_media', media_id=media.id) }}" type="audio/mpeg">{% elif ext == 'wav' %}<source src="{{ url_for('play_media', media_id=media.id) }}" type="audio/wav">{% else %}<source src="{{ url_for('play_media', media_id=media.id) }}" type="audio/ogg">{% endif %}
-            Your browser does not support the audio tag.
-        </audio>
-        {% else %}
-        {% set video_types = {'mp4': 'video/mp4', 'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'wmv': 'video/x-ms-wmv', 'flv': 'video/x-flv', 'webm': 'video/webm'} %}
-        <video controls class="w-full max-h-96 rounded" preload="metadata" playsinline>
-            <source src="{{ url_for('play_media', media_id=media.id) }}#t=0.1" type="{{ video_types.get(ext, 'video/' + ext) }}">
-            Your browser does not support the video tag.
-        </video>
-        {% endif %}
-    </div>
+<a class="back" href="{{ url_for('dashboard') }}"><span>←</span> library</a>
 
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <h2 class="text-lg font-medium text-gray-900 mb-2">File Details</h2>
-                <p class="text-sm text-gray-600">Original filename: {{ media.original_filename }}</p>
-                <p class="text-sm text-gray-600">Size: {{ (media.file_size / (1024 * 1024))|round(2) }} MB</p>
-                <p class="text-sm text-gray-600">Uploaded: {{ media.uploaded_at }}</p>
-            </div>
-            <div class="flex flex-col md:items-end justify-center">
-                <div class="space-y-3">
-                    <a href="{{ url_for('download_media', media_id=media.id) }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 w-full md:w-auto justify-center">
-                        Download File
-                    </a>
-                    <form action="{{ url_for('delete_media', media_id=media.id) }}" method="POST">
-                        <button type="submit" onclick="return confirm('Are you sure you want to delete this media file?')" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 w-full md:w-auto justify-center">
-                            Delete File
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="detailhead">
+	<div class="eyebrow">Media · MEDIA-{{ '%04d'|format(media.id) }} · deck 02</div>
+	<h1 title="{{ media.original_filename }}">{{ media.original_filename }}</h1>
+	<p class="sub">
+		{{ media.file_size|filesize }} ·
+		<b>{% if is_video %}Video{% elif is_audio %}Audio{% elif is_image %}Image{% else %}File{% endif %}</b>
+		· uploaded {{ media.uploaded_at }}
+	</p>
+</div>
+
+<div class="detailgrid">
+	<section class="stage">
+		{% if is_image %}
+			<img src="{{ url_for('play_media', media_id=media.id) }}" alt="{{ media.original_filename }}" />
+		{% elif is_audio %}
+			<audio controls preload="metadata">
+				<source src="{{ url_for('play_media', media_id=media.id) }}" />
+				Your browser does not support the audio element.
+			</audio>
+		{% else %}
+			<video controls preload="metadata" playsinline>
+				<source src="{{ url_for('play_media', media_id=media.id) }}#t=0.1" />
+				Your browser does not support the video element.
+			</video>
+		{% endif %}
+	</section>
+
+	<aside class="side">
+		<div class="panel">
+			<h2>File details</h2>
+			<div class="drow"><span>Original name</span><b>{{ media.original_filename }}</b></div>
+			<div class="drow"><span>Size</span><b>{{ media.file_size|filesize }}</b></div>
+			<div class="drow"><span>Type</span><b>{% if is_video %}Video{% elif is_audio %}Audio{% elif is_image %}Image{% else %}File{% endif %} · {{ ext }}</b></div>
+			<div class="drow"><span>Uploaded</span><b>{{ media.uploaded_at }}</b></div>
+			<div class="drow"><span>Storage</span><b>NAS · vault</b></div>
+		</div>
+
+		<div class="panel">
+			<h2>Actions</h2>
+			<div class="stack">
+				<a class="bigbtn wide" href="{{ url_for('download_media', media_id=media.id) }}">Download file</a>
+				<form action="{{ url_for('delete_media', media_id=media.id) }}" method="POST"
+					data-confirm="This removes the file from the NAS and cannot be undone."
+					data-confirm-title="Delete this file?"
+					data-confirm-target="{{ media.original_filename }}">
+					<button type="submit" class="bigbtn wide danger">Delete file</button>
+				</form>
+			</div>
+		</div>
+
+		<div class="notice">
+			<span class="led"></span>
+			<span>Streaming from the NAS · range requests enabled</span>
+		</div>
+	</aside>
 </div>
 {% endblock %}
+{% block footmeta %}MEDIA-{{ '%04d'|format(media.id) }}{% endblock %}

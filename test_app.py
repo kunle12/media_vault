@@ -1,117 +1,112 @@
-"""Tests for MediaVault application."""
+"""Tests for the Media Vault proxy-identity application."""
 
-import os
-import shutil
+import io
+import sqlite3
 import tempfile
-from unittest.mock import MagicMock, patch
+from pathlib import Path
 
-# These are set in conftest.py — only set if conftest hasn't run yet
-os.environ.setdefault("SECRET_KEY", "test-secret-key")
-os.environ.setdefault("ALLOWED_EMAILS", "user@example.com")
-os.environ.pop("S3_BUCKET", None)
-os.environ.pop("S3_ENDPOINT", None)
+from conftest import TEST_EMAIL
 
 
-def test_index_unauthenticated(client):
-    """Test index page shows correctly when not authenticated."""
-    response = client.get("/")
-    assert response.status_code == 200
-    assert b"MediaVault" in response.data
+def headers(email: str = TEST_EMAIL, groups: str = "users") -> dict:
+    return {"X-Auth-User": email, "X-Auth-Groups": groups}
 
 
-def test_index_authenticated(authenticated_client):
-    """Test index page redirects when authenticated."""
-    response = authenticated_client.get("/")
-    assert response.status_code == 302
-
-
-def test_request_code_invalid_email(client):
-    """Test request code with invalid email."""
-    response = client.post(
-        "/auth/request-code",
-        json={"email": "invalid"},
-    )
-    assert response.status_code == 400
-    data = response.get_json()
-    assert data["success"] is False
-
-
-def test_request_code_unauthorized(client):
-    """Test request code with unauthorized email."""
-    response = client.post(
-        "/auth/request-code",
-        json={"email": "notallowed@example.com"},
-    )
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["success"] is False
-
-
-def test_request_code_valid(client):
-    """Test request code with valid email."""
-    with patch("auth.send_email", return_value=True):
-        response = client.post(
-            "/auth/request-code",
-            json={"email": "user@example.com"},
+def seed_user(app, email: str) -> int:
+    conn = sqlite3.connect(app.config["DATABASE"])
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (email, created_at) VALUES (?, datetime('now'))",
+            (email,),
         )
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["success"] is True
+        conn.commit()
+        return int(cursor.lastrowid)
+    finally:
+        conn.close()
 
 
-def test_verify_code_no_code(client):
-    """Test verify code when no code exists."""
-    response = client.post(
-        "/auth/verify-code",
-        json={"email": "user@example.com", "code": "ABC123"},
-    )
-    assert response.status_code == 400
-    data = response.get_json()
-    assert data["success"] is False
+def seed_media(app, user_id: int, path: Path, name: str = "clip.mp4") -> int:
+    path.write_bytes(b"0123456789abcdef")
+    conn = sqlite3.connect(app.config["DATABASE"])
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO media (filename, original_filename, storage_key, file_size, user_id) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (name, name, str(path), path.stat().st_size, user_id),
+        )
+        conn.commit()
+        return int(cursor.lastrowid)
+    finally:
+        conn.close()
 
 
-def test_logout(authenticated_client):
-    """Test logout clears session."""
-    response = authenticated_client.post("/auth/logout")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["success"] is True
+def test_index_redirects_to_dashboard(client):
+    response = client.get("/", headers=headers())
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/dashboard")
 
 
-def test_status_authenticated(authenticated_client):
-    """Test auth status when authenticated."""
-    response = authenticated_client.get("/auth/status")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["authenticated"] is True
-    assert data["email"] == "user@example.com"
-
-
-def test_status_unauthenticated(client):
-    """Test auth status when not authenticated."""
-    response = client.get("/auth/status")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["authenticated"] is False
-
-
-def test_dashboard_requires_auth(client):
-    """Test dashboard requires authentication."""
+def test_missing_identity_is_refused(client):
     response = client.get("/dashboard")
+    assert response.status_code == 401
+    assert b"Identity required" in response.data
+
+
+def test_untrusted_remote_is_refused(client):
+    response = client.get(
+        "/dashboard",
+        headers=headers(),
+        environ_overrides={"REMOTE_ADDR": "10.0.0.5"},
+    )
+    assert response.status_code == 403
+    assert b"Untrusted origin" in response.data
+
+
+def test_identity_provisions_local_user(app, client):
+    with app.app_context():
+        response = client.get("/dashboard", headers=headers("new@example.com"))
+        assert response.status_code == 200
+        assert b"No media in the vault yet" in response.data
+
+        conn = sqlite3.connect(app.config["DATABASE"])
+        try:
+            row = conn.execute(
+                "SELECT id FROM users WHERE email = ?", ("new@example.com",)
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+
+
+def test_existing_user_keeps_their_id(app, client):
+    user_id = seed_user(app, TEST_EMAIL)
+    response = client.get("/dashboard", headers=headers())
     assert response.status_code == 200
-    assert b"Sign In" in response.data or b"Login" in response.data
+
+    conn = sqlite3.connect(app.config["DATABASE"])
+    try:
+        row = conn.execute(
+            "SELECT id FROM users WHERE email = ?", (TEST_EMAIL,)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row[0] == user_id
 
 
-def test_dashboard_authenticated(authenticated_client):
-    """Test dashboard shows media for authenticated user."""
-    response = authenticated_client.get("/dashboard")
+def test_dashboard_authenticated(app, client, tmp_path):
+    user_id = seed_user(app, TEST_EMAIL)
+    seed_media(app, user_id, tmp_path / "clip.mp4")
+    response = client.get("/dashboard", headers=headers())
     assert response.status_code == 200
-    assert b"Dashboard" in response.data
+    assert b"Your vault" in response.data
+    assert b"clip.mp4" in response.data
 
 
-def test_dashboard_sort_options(authenticated_client):
-    """Test dashboard sorting with various sort options."""
-    sort_options = [
+def test_dashboard_sort_options(client):
+    seed_user(client.application, TEST_EMAIL)
+    for sort in (
         "newest",
         "oldest",
         "name_asc",
@@ -119,166 +114,191 @@ def test_dashboard_sort_options(authenticated_client):
         "size_desc",
         "size_asc",
         "type",
-    ]
-    for sort in sort_options:
-        response = authenticated_client.get(f"/dashboard?sort={sort}")
+    ):
+        response = client.get(f"/dashboard?sort={sort}", headers=headers())
         assert response.status_code == 200
-
-
-def test_dashboard_sort_invalid_fallback(authenticated_client):
-    """Test dashboard falls back to default for invalid sort."""
-    response = authenticated_client.get("/dashboard?sort=invalid")
+    response = client.get("/dashboard?sort=invalid", headers=headers())
     assert response.status_code == 200
-    assert b"Dashboard" in response.data
 
 
-def test_upload_requires_auth(client):
-    """Test upload requires authentication."""
+def test_upload_requires_identity(client):
     response = client.get("/upload")
+    assert response.status_code == 401
+
+
+def test_upload_get_authenticated(client):
+    response = client.get("/upload", headers=headers())
     assert response.status_code == 200
-    assert b"Sign In" in response.data or b"Login" in response.data
+    assert b"Add to the vault" in response.data
 
 
-def test_upload_get_authenticated(authenticated_client):
-    """Test upload page loads for authenticated user."""
-    response = authenticated_client.get("/upload")
-    assert response.status_code == 200
+def test_upload_file(client):
+    response = client.post(
+        "/upload",
+        headers=headers(),
+        data={"files": (io.BytesIO(b"fake audio content"), "sample.wav")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 302
+    assert "/dashboard" in response.headers["Location"]
 
-
-def test_upload_file(authenticated_client):
-    """Test uploading a file."""
-    upload_folder = tempfile.mkdtemp()
-    os.environ["UPLOAD_FOLDER"] = upload_folder
+    conn = sqlite3.connect(client.application.config["DATABASE"])
     try:
-        test_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        test_file.write(b"fake audio content")
-        test_file.close()
-
-        with open(test_file.name, "rb") as f:
-            response = authenticated_client.post(
-                "/upload",
-                data={"files": f},
-                content_type="multipart/form-data",
-            )
-
-        assert response.status_code == 302
-        assert "/dashboard" in response.location
-        os.unlink(test_file.name)
+        row = conn.execute("SELECT original_filename, file_size FROM media").fetchone()
     finally:
-        shutil.rmtree(upload_folder, ignore_errors=True)
+        conn.close()
+    assert row[0] == "sample.wav"
+    assert row[1] > 0
 
 
-def test_upload_invalid_file(authenticated_client):
-    """Test uploading invalid file type."""
-    upload_folder = tempfile.mkdtemp()
-    os.environ["UPLOAD_FOLDER"] = upload_folder
-
+def test_upload_rejects_invalid_type(client):
+    response = client.post(
+        "/upload",
+        headers=headers(),
+        data={"files": (io.BytesIO(b"nope"), "sample.exe")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 302
+    conn = sqlite3.connect(client.application.config["DATABASE"])
     try:
-        test_file = tempfile.NamedTemporaryFile(suffix=".exe", delete=False)
-        test_file.write(b"fake content")
-        test_file.close()
-
-        with open(test_file.name, "rb") as f:
-            response = authenticated_client.post(
-                "/upload",
-                data={"files": f},
-                content_type="multipart/form-data",
-            )
-
-        assert response.status_code == 302
-        os.unlink(test_file.name)
+        count = conn.execute("SELECT COUNT(*) FROM media").fetchone()[0]
     finally:
-        shutil.rmtree(upload_folder, ignore_errors=True)
+        conn.close()
+    assert count == 0
 
 
-def test_view_media_requires_auth(client):
-    """Test view media requires authentication."""
-    response = client.get("/media/1")
+def test_view_media(app, client, tmp_path):
+    user_id = seed_user(app, TEST_EMAIL)
+    media_id = seed_media(app, user_id, tmp_path / "clip.mp4")
+    response = client.get(f"/media/{media_id}", headers=headers())
     assert response.status_code == 200
-    assert b"Sign In" in response.data or b"Login" in response.data
+    assert b"clip.mp4" in response.data
+    assert b"File details" in response.data
 
 
-def test_download_requires_auth(client):
-    """Test download requires authentication."""
-    response = client.get("/media/1/download")
+def test_media_is_scoped_to_identity(app, client, tmp_path):
+    seed_user(app, TEST_EMAIL)
+    other_id = seed_user(app, "other@example.com")
+    media_id = seed_media(app, other_id, tmp_path / "private.mp4")
+    response = client.get(f"/media/{media_id}", headers=headers())
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/dashboard")
+
+
+def test_stream_supports_range_requests(app, client, tmp_path):
+    user_id = seed_user(app, TEST_EMAIL)
+    media_id = seed_media(app, user_id, tmp_path / "clip.mp4")
+    response = client.get(
+        f"/media/{media_id}/play",
+        headers={**headers(), "Range": "bytes=0-3"},
+    )
+    assert response.status_code == 206
+    assert response.data == b"0123"
+    assert response.headers["Content-Range"] == "bytes 0-3/16"
+
+
+def test_download_sets_attachment(app, client, tmp_path):
+    user_id = seed_user(app, TEST_EMAIL)
+    media_id = seed_media(app, user_id, tmp_path / "clip.mp4")
+    response = client.get(f"/media/{media_id}/download", headers=headers())
     assert response.status_code == 200
-    assert b"Sign In" in response.data or b"Login" in response.data
+    assert "attachment" in response.headers["Content-Disposition"]
 
 
-def test_delete_requires_auth(client):
-    """Test delete requires authentication."""
-    response = client.post("/media/1/delete")
+def test_delete_removes_file_and_row(app, client, tmp_path):
+    user_id = seed_user(app, TEST_EMAIL)
+    path = tmp_path / "clip.mp4"
+    media_id = seed_media(app, user_id, path)
+    response = client.post(f"/media/{media_id}/delete", headers=headers())
+    assert response.status_code == 302
+    assert not path.exists()
+    conn = sqlite3.connect(app.config["DATABASE"])
+    try:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM media WHERE id = ?", (media_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert count == 0
+
+
+def test_healthz(client):
+    response = client.get("/healthz")
     assert response.status_code == 200
-    assert b"Sign In" in response.data or b"Login" in response.data
+    data = response.get_json()
+    assert data["status"] == "ok"
+    assert data["storage"] == "ok"
+
+
+def test_stylesheet_and_themed_404(client):
+    response = client.get("/static/mediavault.css")
+    assert response.status_code == 200
+    assert b"--peach" in response.data
+
+    response = client.get("/dashboard/does-not-exist", headers=headers())
+    assert response.status_code == 404
+    assert b"Not in the vault" in response.data
 
 
 def test_local_storage_save():
-    """Test local storage save."""
     from storage import LocalStorage
 
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = LocalStorage(tmpdir)
-        mock_file = MagicMock()
-        mock_file.save = MagicMock()
-
-        key = storage.save(mock_file, "test.txt")
+        fake = type(
+            "F", (), {"save": lambda self, path: Path(path).write_bytes(b"x")}
+        )()
+        key = storage.save(fake, "test.txt")
         assert key.endswith("test.txt")
-        mock_file.save.assert_called_once()
 
 
 def test_local_storage_delete():
-    """Test local storage delete."""
     from storage import LocalStorage
 
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = LocalStorage(tmpdir)
-        test_file = os.path.join(tmpdir, "test.txt")
-        with open(test_file, "w") as f:
-            f.write("test")
-
-        result = storage.delete(test_file)
-        assert result is True
-        assert not os.path.exists(test_file)
+        path = Path(tmpdir) / "test.txt"
+        path.write_text("test")
+        assert storage.delete(str(path)) is True
+        assert not path.exists()
 
 
 def test_local_storage_get_file():
-    """Test local storage get_file."""
     from storage import LocalStorage
 
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = LocalStorage(tmpdir)
-        test_file = os.path.join(tmpdir, "test.txt")
-        content = b"test content"
-        with open(test_file, "wb") as f:
-            f.write(content)
-
-        result = storage.get_file(test_file)
-        assert result == content
+        path = Path(tmpdir) / "test.txt"
+        path.write_bytes(b"test content")
+        assert storage.get_file(str(path)) == b"test content"
 
 
 def test_allowed_file_extensions():
-    """Test allowed file extensions."""
     from app import allowed_file
 
-    assert allowed_file("video.mp4") is True
-    assert allowed_file("video.avi") is True
-    assert allowed_file("video.mov") is True
-    assert allowed_file("audio.mp3") is True
-    assert allowed_file("audio.wav") is True
-    assert allowed_file("audio.ogg") is True
-    assert allowed_file("image.png") is True
-    assert allowed_file("image.jpg") is True
-    assert allowed_file("image.jpeg") is True
-    assert allowed_file("image.gif") is True
-    assert allowed_file("image.webp") is True
-    assert allowed_file("image.bmp") is True
-    assert allowed_file("image.heic") is True
-    assert allowed_file("file.txt") is False
-    assert allowed_file("file") is False
-    assert allowed_file("file.exe") is False
+    for name in (
+        "video.mp4",
+        "video.avi",
+        "video.mov",
+        "audio.mp3",
+        "audio.wav",
+        "audio.ogg",
+        "image.png",
+        "image.jpg",
+        "image.jpeg",
+        "image.gif",
+        "image.webp",
+        "image.bmp",
+        "image.heic",
+    ):
+        assert allowed_file(name) is True
+    for name in ("file.txt", "file", "file.exe"):
+        assert allowed_file(name) is False
 
 
-if __name__ == "__main__":
-    import pytest
+def test_human_size_filter():
+    from app import human_size
 
-    pytest.main([__file__, "-v"])
+    assert human_size(0) == "0 B"
+    assert human_size(1024) == "1.0 KB"
+    assert human_size(1024 * 1024 * 3) == "3.0 MB"

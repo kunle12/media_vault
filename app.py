@@ -1,10 +1,11 @@
 """MediaVault - Flask application for managing video and audio files."""
 
 import os
+import shutil
 import sqlite3
 import sys
 import uuid
-from datetime import timedelta
+from datetime import datetime, timezone
 from functools import wraps
 from typing import Any
 
@@ -12,16 +13,15 @@ from flask import (
     Flask,
     Response,
     flash,
+    g,
+    jsonify,
     redirect,
     render_template,
     request,
-    session,
     url_for,
 )
-from flask_caching import Cache
 from loguru import logger
 
-from auth import auth_bp, is_google_oauth_enabled
 from config import Config
 from storage import S3UploadError, StorageError, get_storage_backend, is_s3_enabled
 
@@ -43,34 +43,22 @@ logger.add(
 
 logger.info("MediaVault application starting")
 
-app = Flask(__name__)
+application_root = Config.APPLICATION_ROOT()
+_static_prefix = (application_root.rstrip("/") or "") + "/static"
+
+app = Flask(__name__, static_url_path=_static_prefix)
 app.config["SECRET_KEY"] = Config.SECRET_KEY()
-app.config["WTF_CSRF_ENABLED"] = True
-app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["UPLOAD_FOLDER"] = Config.UPLOAD_FOLDER()
 app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH()
 app.config["ALLOWED_EXTENSIONS"] = Config.ALLOWED_EXTENSIONS
 app.config["DATABASE"] = Config.DATABASE()
-app.config["APPLICATION_ROOT"] = Config.APPLICATION_ROOT()
+app.config["APPLICATION_ROOT"] = application_root
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 server_name = Config.SERVER_NAME()
 if server_name:
     app.config["SERVER_NAME"] = server_name
 
-cache_type = Config.CACHE_TYPE()
-if cache_type == "redis":
-    app.config["CACHE_REDIS_URL"] = Config.CACHE_REDIS_URL()
-app.config["CACHE_TYPE"] = cache_type
-app.config["CACHE_DEFAULT_TIMEOUT"] = Config.CACHE_DEFAULT_TIMEOUT
-
-cache = Cache(app)
-
-app.config["GOOGLE_OAUTH_ENABLED"] = is_google_oauth_enabled()
-
-session_timeout_minutes = Config.SESSION_TIMEOUT_MINUTES()
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=session_timeout_minutes)
-logger.info(f"Session timeout set to {session_timeout_minutes} minutes")
-
-application_root = Config.APPLICATION_ROOT()
 app.jinja_env.globals["application_root"] = (
     application_root if application_root != "/" else ""
 )
@@ -88,16 +76,54 @@ def prefix_route(route, *args, **kwargs):
 
 app.route = prefix_route
 
-app.register_blueprint(
-    auth_bp, url_prefix=application_root if application_root != "/" else None
-)
+
+def current_user_id() -> int:
+    """Return the guard identity's local user id, or abort."""
+    uid = getattr(g, "user_id", None)
+    if uid is None:
+        raise RuntimeError("identity middleware did not run")
+    return int(uid)
 
 
 @app.before_request
-def extend_session() -> None:
-    """Slide session expiry on each request for authenticated users."""
-    if "user_id" in session:
-        session.modified = True
+def load_identity() -> Any:
+    """Trust the guard's identity header from the local reverse proxy only.
+
+    The app has no login of its own. nginx performs the guard auth_request and
+    overwrites ``X-Auth-User``; a request that reaches Flask without it (for
+    example a direct loopback call) is refused instead of falling back to a
+    local login.
+    """
+    if request.endpoint in ("static", "healthz"):
+        return None
+    email = request.headers.get(Config.IDENTITY_HEADER, "").strip().lower()
+    if request.remote_addr not in Config.TRUSTED_PROXY_ADDRS:
+        return render_template(
+            "error.html",
+            code=403,
+            title="Untrusted origin",
+            message="Media Vault only accepts requests through the workspace gate.",
+        ), 403
+    if (
+        not email
+        or len(email) > 320
+        or email.count("@") != 1
+        or any(ch.isspace() for ch in email)
+    ):
+        return render_template(
+            "error.html",
+            code=401,
+            title="Identity required",
+            message="Open Media Vault from the workspace so the guard can identify you.",
+        ), 401
+    g.user_id = ensure_user_exists(email)
+    g.email = email
+    g.groups = [
+        part.strip()
+        for part in request.headers.get(Config.GROUPS_HEADER, "").split(",")
+        if part.strip()
+    ]
+    return None
 
 
 @app.after_request
@@ -105,14 +131,19 @@ def add_security_headers(response: Response) -> Response:
     """Add Content-Security-Policy and other security headers."""
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
+        "media-src 'self'; "
+        "font-src 'self'; "
         "connect-src 'self'; "
-        "form-action 'self'"
+        "form-action 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
 
 
@@ -171,6 +202,35 @@ def ensure_upload_folder() -> None:
             os.makedirs(upload_folder)
 
 
+def ensure_user_exists(email: str) -> int:
+    """Map a verified guard identity to the local users row.
+
+    Existing users keep their id, so media ownership survives the migration
+    from the old email-code login. The unique index makes this safe across
+    concurrent workers.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        row = cursor.fetchone()
+        if row:
+            return int(row["id"])
+        cursor.execute(
+            "INSERT INTO users (email, created_at) VALUES (?, ?) "
+            "ON CONFLICT(email) DO NOTHING",
+            (email, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("could not provision local user")
+        return int(row["id"])
+    finally:
+        conn.close()
+
+
 # Helper functions
 def allowed_file(filename: str) -> bool:
     """Check if filename has an allowed extension."""
@@ -180,13 +240,29 @@ def allowed_file(filename: str) -> bool:
     )
 
 
+@app.template_filter("filesize")
+def human_size(num: int | float | None) -> str:
+    """Render a byte count as a compact human value."""
+    if not num:
+        return "0 B"
+    size = float(num)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
 def login_required(f):
-    """Decorator to require authentication for routes."""
+    """Decorator documenting that a route needs the guard identity.
+
+    The actual refusal happens in ``load_identity`` before the view runs; this
+    keeps the intent visible at each route without duplicating error pages.
+    """
 
     @wraps(f)
     def decorated_function(*args: Any, **kwargs: Any) -> Any:
-        if "user_id" not in session:
-            return render_template("auth_trigger.html")
+        current_user_id()
         return f(*args, **kwargs)
 
     return decorated_function
@@ -195,26 +271,31 @@ def login_required(f):
 # Routes
 @app.route("/")
 def index() -> Any:
-    """Home page - redirect to dashboard if authenticated."""
-    if "user_id" in session:
-        return redirect(url_for("dashboard"))
-    return render_template("index.html")
+    """The vault root always opens the library."""
+    return redirect(url_for("dashboard"))
 
 
-@app.route("/trigger-auth")
-def trigger_auth() -> Any:
-    """Render the auth trigger page."""
-    return render_template("auth_trigger.html")
+@app.route("/healthz")
+def healthz() -> Any:
+    """Liveness and storage check for the operator."""
+    try:
+        conn = get_db_connection()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+    except sqlite3.Error as exc:
+        logger.error(f"healthz database check failed: {exc}")
+        return jsonify({"status": "error", "db": "down"}), 503
+    upload_folder = app.config["UPLOAD_FOLDER"]
+    if not is_s3_enabled() and not os.path.isdir(upload_folder):
+        return jsonify({"status": "error", "storage": "missing"}), 503
+    return jsonify({"status": "ok", "db": "ok", "storage": "ok"})
 
 
 @app.route("/dashboard")
 @login_required
 def dashboard() -> Any:
     """User dashboard showing their uploaded media."""
-    sort = request.args.get("sort")
-
-    if sort is None:
-        sort = session.get("sort_preference", "newest")
+    sort = request.args.get("sort", "newest")
 
     valid_sorts = [
         "newest",
@@ -248,16 +329,22 @@ def dashboard() -> Any:
     page = request.args.get("page", 1, type=int)
     per_page = Config.ITEMS_PER_PAGE()
     offset = (page - 1) * per_page
+    uid = current_user_id()
 
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT COUNT(*) as count FROM media WHERE user_id = ?",
-        (session["user_id"],),
+        "SELECT COUNT(*) AS count, COALESCE(SUM(file_size), 0) AS total_bytes "
+        "FROM media WHERE user_id = ?",
+        (uid,),
     )
-    total_items = cursor.fetchone()["count"]
+    totals = cursor.fetchone()
+    total_items = int(totals["count"])
+    total_bytes = int(totals["total_bytes"])
     total_pages = max(1, (total_items + per_page - 1) // per_page)
 
+    if page < 1:
+        page = 1
     if page > total_pages:
         page = total_pages
         offset = (page - 1) * per_page
@@ -266,10 +353,20 @@ def dashboard() -> Any:
         "SELECT * FROM media WHERE user_id = ? ORDER BY "
         + order_by
         + " LIMIT ? OFFSET ?",
-        (session["user_id"], per_page, offset),
+        (uid, per_page, offset),
     )
     media = cursor.fetchall()
     conn.close()
+
+    disk_used = disk_total = disk_percent = None
+    if not is_s3_enabled():
+        try:
+            usage = shutil.disk_usage(app.config["UPLOAD_FOLDER"])
+            disk_used, disk_total = usage.used, usage.total
+            disk_percent = round(usage.used / usage.total * 100) if usage.total else 0
+        except OSError:
+            pass
+
     return render_template(
         "dashboard.html",
         media=media,
@@ -278,27 +375,12 @@ def dashboard() -> Any:
         per_page=per_page,
         total_pages=total_pages,
         total_items=total_items,
+        total_bytes=total_bytes,
+        disk_used=disk_used,
+        disk_total=disk_total,
+        disk_percent=disk_percent,
+        storage_path="S3" if is_s3_enabled() else app.config["UPLOAD_FOLDER"],
     )
-
-
-@app.route("/dashboard/set_sort", methods=["POST"])
-@login_required
-def set_sort_preference() -> Any:
-    """Save user's sort preference to session."""
-    sort = request.form.get("sort", "newest")
-    valid_sorts = [
-        "newest",
-        "oldest",
-        "name_asc",
-        "name_desc",
-        "size_desc",
-        "size_asc",
-        "type",
-    ]
-    if sort not in valid_sorts:
-        sort = "newest"
-    session["sort_preference"] = sort
-    return redirect(url_for("dashboard"))
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -343,7 +425,7 @@ def upload() -> Any:
                             original_filename,
                             storage_key,
                             file_size,
-                            session["user_id"],
+                            current_user_id(),
                         ),
                     )
                     conn.commit()
@@ -387,7 +469,18 @@ def upload() -> Any:
         return redirect(url_for("dashboard"))
 
     max_size_mb = Config.MAX_CONTENT_LENGTH() // (1024 * 1024)
-    return render_template("upload.html", max_size_mb=max_size_mb)
+    disk_free = None
+    if not is_s3_enabled():
+        try:
+            disk_free = shutil.disk_usage(app.config["UPLOAD_FOLDER"]).free
+        except OSError:
+            pass
+    return render_template(
+        "upload.html",
+        max_size_mb=max_size_mb,
+        disk_free=disk_free,
+        storage_path=app.config["UPLOAD_FOLDER"],
+    )
 
 
 def validate_media_id(media_id: int) -> bool:
@@ -406,7 +499,7 @@ def view_media(media_id: int) -> Any:
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM media WHERE id = ? AND user_id = ?",
-        (media_id, session["user_id"]),
+        (media_id, current_user_id()),
     )
     media = cursor.fetchone()
     conn.close()
@@ -516,7 +609,7 @@ def play_media(media_id: int) -> Any:
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM media WHERE id = ? AND user_id = ?",
-        (media_id, session["user_id"]),
+        (media_id, current_user_id()),
     )
     media = cursor.fetchone()
     conn.close()
@@ -627,7 +720,7 @@ def download_media(media_id: int) -> Any:
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM media WHERE id = ? AND user_id = ?",
-        (media_id, session["user_id"]),
+        (media_id, current_user_id()),
     )
     media = cursor.fetchone()
     conn.close()
@@ -690,7 +783,7 @@ def delete_media(media_id: int) -> Any:
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM media WHERE id = ? AND user_id = ?",
-        (media_id, session["user_id"]),
+        (media_id, current_user_id()),
     )
     media = cursor.fetchone()
 
@@ -713,6 +806,40 @@ def delete_media(media_id: int) -> Any:
 
     flash("Media successfully deleted", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.errorhandler(404)
+def not_found(_error: Any) -> tuple[str, int]:
+    """Render a themed not-found page instead of Flask's default."""
+    return render_template(
+        "error.html",
+        code=404,
+        title="Not in the vault",
+        message="That file or route does not exist in this deck.",
+    ), 404
+
+
+@app.errorhandler(413)
+def too_large(_error: Any) -> tuple[str, int]:
+    """Render a themed upload-too-large page."""
+    limit = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+    return render_template(
+        "error.html",
+        code=413,
+        title="Upload too large",
+        message=f"Each upload is limited to {limit} MB.",
+    ), 413
+
+
+@app.errorhandler(500)
+def server_error(_error: Any) -> tuple[str, int]:
+    """Render a themed server-error page."""
+    return render_template(
+        "error.html",
+        code=500,
+        title="Vault offline",
+        message="The vault hit an unexpected error. Try again in a moment.",
+    ), 500
 
 
 ensure_upload_folder()
